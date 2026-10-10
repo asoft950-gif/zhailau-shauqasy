@@ -25,7 +25,16 @@ function toast(icn,title,sub,action,ms){
   t.append(el('span','ic',icn));
   const w=el('div');w.append(el('b','',title));if(sub)w.append(el('small','',sub));t.append(w);
   if(action){const b=el('button','',action.label);b.onclick=()=>{t.remove();action.fn()};t.append(b)}
-  box.append(t);setTimeout(()=>t.remove(),ms||4500);
+  box.append(t);const tm=setTimeout(()=>t.remove(),ms||4500);
+  /* swipe sideways (or up) to dismiss */
+  let x0=0,y0=0,dx=0,dy=0,drag=false;
+  t.style.touchAction='pan-y';
+  t.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;drag=true;x0=e.clientX;y0=e.clientY;dx=dy=0;t.style.transition='none';try{t.setPointerCapture(e.pointerId)}catch(_){}});
+  t.addEventListener('pointermove',e=>{if(!drag)return;dx=e.clientX-x0;dy=Math.min(0,e.clientY-y0);t.style.transform='translate('+dx+'px,'+dy+'px)';t.style.opacity=String(Math.max(.2,1-Math.max(Math.abs(dx),-dy)/200))});
+  const end=()=>{if(!drag)return;drag=false;
+    if(Math.abs(dx)>60||dy<-40){clearTimeout(tm);t.style.transition='transform .2s,opacity .2s';t.style.transform='translate('+(Math.abs(dx)>=-dy?(dx<0?-500:500):0)+'px,'+(Math.abs(dx)>=-dy?0:-200)+'px)';t.style.opacity='0';setTimeout(()=>t.remove(),200)}
+    else{t.style.transition='transform .2s,opacity .2s';t.style.transform='';t.style.opacity=''}};
+  t.addEventListener('pointerup',end);t.addEventListener('pointercancel',end);
 }
 
 /* ---------- overlay helper ---------- */
@@ -77,7 +86,7 @@ async function refresh(){
   const r=await api('me');
   me=r.user||null;data=r.user?r:null;
   renderBtn();showNotice(r.notice);
-  if(r.user&&r.streak&&r.streak.canClaim&&!window.__stkSeen){window.__stkSeen=1;setTimeout(()=>toast('🔥','Күнделікті сыйлық дайын!','Тапсырма табынан ал',()=>profileView('daily'),5000),1200)}
+  if(r.user&&r.streak&&r.streak.canClaim&&!window.__stkSeen){window.__stkSeen=1;setTimeout(()=>toast('🔥','Күнделікті сыйлық дайын!','Тапсырма табынан ал',{label:'Алу',fn:()=>profileView('daily')},6000),1200)}
   return r;
 }
 
