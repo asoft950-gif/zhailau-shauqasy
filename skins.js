@@ -421,24 +421,54 @@ function rkImg(t,d){
   e.img.src='skins/knights/'+t+'_'+RK_DIR[d||'r']+'.webp';
   return e;
 }
-function rkFrame(o){
-  const s=o.strike||0,r=o.rear||0;
-  if(s<-.3)return 4;
-  if(s>.3)return s<.55?5:s<.8?6:7;
-  if(r>.45)return r>.7?5:4;
-  if(o.moving)return Math.floor((o.t||0)*5)%4;
-  if(o.mood==='angry')return 6;
-  return 8;
+const rkSm=u=>u<=0?0:u>=1?1:u*u*(3-2*u);
+/* draw one sheet cell (idx: 0-3 walk, 4-7 attack, 8 idle, 9 fallen) of direction dr at alpha al */
+function rkCell(c,t,dr,P,idx,al,bob){
+  if(al<=.003)return true;
+  const e=rkImg(t,dr);if(!e.ok)return false;
+  const m=RK_META[t+dr],mw=m[0],mh=m[1];
+  const col=idx===9?(P.team==='b'?3:2):idx===8?(P.team==='b'?1:0):idx%4;
+  const row=idx>=8?4:(P.team==='b'?2:0)+(idx>=4?1:0);
+  const g=c.globalAlpha;c.globalAlpha=g*Math.min(1,al);
+  c.drawImage(e.img,col*mw,row*mh,mw,mh,-m[2]*RK_U,-m[3]*RK_U+2+bob,mw*RK_U,mh*RK_U);
+  c.globalAlpha=g;return true;
+}
+/* continuous cross-fade between consecutive cells a..b (pos is fractional index) */
+function rkBlend(c,t,dr,P,base,n,pos,al,bob,loop){
+  const i=Math.floor(pos),f=rkSm(pos-i),j=loop?(i+1)%n:Math.min(n-1,i+1);
+  rkCell(c,t,dr,P,base+i%n,al,bob);
+  if(f>.01&&j!==i%n)rkCell(c,t,dr,P,base+j,al*f,bob);
 }
 const rkDraw=t=>(c,P,o)=>{
-  const dr=o.dir||'r',e=rkImg(t,dr),m=RK_META[t+dr],[mw,mh,max,may]=m;
+  const dr=o.dir||'r';
+  const e=rkImg(t,dr);
   if(!e.ok){c.save();c.globalAlpha*=.35;c.fillStyle=P.main;c.beginPath();c.ellipse(0,-30,16,28,0,0,TAU);c.fill();c.restore();return}
-  const dd=o.mood==='dead',fr=dd?9:rkFrame(o),idl=fr>=8,col=dd?(P.team==='b'?3:2):idl?(P.team==='b'?1:0):fr%4,row=idl?4:(P.team==='b'?2:0)+(fr>=4?1:0);
-  const bob=o.moving?-Math.abs(Math.sin((o.ph||0)*1.6))*1.5:Math.sin(o.t*2.2+o.id)*-.6;
-  const dead=o.mood==='dead';
+  const mv=o.mv||0,dm=o.dm||0,dx=o.dx===undefined?1:o.dx;
+  const s=o.strike||0,r=o.rear||0,w=(o.t||0)*6;
+  const bob=mv>.05?-Math.abs(Math.sin(w*Math.PI/2))*1.8*mv:0;
+  const alive=1-dm;
   c.save();
-  
-  c.drawImage(e.img,col*mw,row*mh,mw,mh,-max*RK_U,-may*RK_U+2+bob,mw*RK_U,mh*RK_U);
+  if(dm>0)c.translate(0,3.5*rkSm(dm));
+  /* previous facing fades out while the new one fades in */
+  if(o.pd&&dx<1&&alive>0)rkCell(c,t,o.pd,P,8,(1-rkSm(dx))*alive,0);
+  const A=alive*(o.pd&&dx<1?rkSm(dx):1);
+  if(A>0){
+    /* base: idle <-> walk cycle */
+    rkCell(c,t,dr,P,8,A*(1-mv*.85),0);
+    if(mv>.01)rkBlend(c,t,dr,P,0,4,w%4,A*mv,bob,true);
+    /* attack / anticipation overlays */
+    let aw=0,apos=0;
+    if(s<-.02){aw=rkSm(Math.min(1,-s/.35));apos=-1}
+    else if(s>.02){aw=rkSm(Math.min(1,s/.14));apos=Math.min(1,s)*2}
+    else if(r>.05){aw=rkSm(Math.min(1,r*2.2));apos=r>.45?(r-.45)/.55*1:-1}
+    else if(o.mood==='angry'&&mv<.3){aw=.7;apos=-1}
+    if(aw>0){
+      if(apos<0)rkCell(c,t,dr,P,4,A*aw,bob);          /* wind-up */
+      else if(r>.05&&s<=.02){rkCell(c,t,dr,P,4,A*aw*(1-apos),bob);rkCell(c,t,dr,P,5,A*aw*apos,bob)}
+      else rkBlend(c,t,dr,P,5,3,apos,A*aw,bob,false);
+    }
+  }
+  if(dm>0)rkCell(c,t,dr,P,9,rkSm(dm),0);
   c.restore();
 };
 const RKP={
