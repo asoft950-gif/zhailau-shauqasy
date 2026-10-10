@@ -599,7 +599,7 @@ let locLog=[],rp=null,campStage=0,segMode='ai',tcSel=0,pz=null;
 try{tcSel=[0,180,300,600].includes(+localStorage.tc)?+localStorage.tc:0}catch(e){}
 let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
 let hist=[],lost={w:[],b:[]},parts=[],shake=0,time=0,gen=0,idc=1;
-const odata={t:0,id:0,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false};
+const odata={dir:undefined,t:0,id:0,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false};
 
 function rest(p,r,c){
   p.px=c;p.py=r;p.z=0;p.rot=0;p.sx=1;p.sy=1;p.alpha=1;p.wing=0;p.rear=0;p.strike=0;p.lean=0;p.tint=0;p.flash=0;p.mood='idle';p.moving=false;p.ph=0;
@@ -696,8 +696,9 @@ const off=document.createElement('canvas');
 /* idle pieces are pre-rendered once (the vector art is expensive); animated ones are drawn live */
 let bakes=new Map();
 const BW=2.2,BH=1.5,BAX=1.1,BAY=1.35;
-function bake(t,col){
-  const k=t+col+pskin[col]+T+'|'+dpr;let b=bakes.get(k);
+const vdir=p=>{if(!skO(p.c).dirs)return undefined;const v=p.vd||(p.c==='w'?'u':'d');return v==='h'?'r':((v==='u')!==flip?'u':'d')};
+function bake(t,col,dir){
+  const k=t+col+pskin[col]+(dir||'')+T+'|'+dpr;let b=bakes.get(k);
   if(b)return b;
   b=document.createElement('canvas');
   b.width=Math.ceil(T*BW*dpr);b.height=Math.ceil(T*BH*dpr);
@@ -705,7 +706,7 @@ function bake(t,col){
   x.setTransform(dpr,0,0,dpr,0,0);x.translate(T*BAX,T*BAY);
   const s=T/100*scO(col,t);x.scale(s,s);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
-  drawO(col,t)(x,palO(col),{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  drawO(col,t)(x,palO(col),{dir,t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
   bakes.set(k,b);return b;
 }
 function drawSprite(c,p,gx,gy,tm){
@@ -713,7 +714,7 @@ function drawSprite(c,p,gx,gy,tm){
     c.save();c.translate(gx,gy);c.rotate(flip?-p.rot:p.rot);
     c.scale((flip?-p.face:p.face)*p.sx,p.sy*(1+Math.sin(tm*2.4+p.id)*.008));
     c.rotate(p.lean);
-    c.drawImage(bake(p.t,p.c),-T*BAX,-T*BAY,T*BW,T*BH);
+    c.drawImage(bake(p.t,p.c,vdir(p)),-T*BAX,-T*BAY,T*BW,T*BH);
     c.restore();return;
   }
   c.save();c.translate(gx,gy);
@@ -722,7 +723,7 @@ function drawSprite(c,p,gx,gy,tm){
   c.scale((flip?-p.face:p.face)*p.sx*s,p.sy*s);
   c.rotate(p.lean);
   c.lineJoin='round';c.lineCap='round';c.lineWidth=3;
-  odata.t=tm+p.id*.37;odata.id=p.id;odata.ph=p.ph;odata.moving=p.moving;odata.strike=p.strike;odata.rear=p.rear;odata.wing=p.wing;odata.mood=p.mood;
+  odata.dir=vdir(p);odata.t=tm+p.id*.37;odata.id=p.id;odata.ph=p.ph;odata.moving=p.moving;odata.strike=p.strike;odata.rear=p.rear;odata.wing=p.wing;odata.mood=p.mood;
   odata.blink=((tm*.9+p.id*1.3)%4)<.1;
   drawO(p.c,p.t)(c,palO(p.c),odata);
   c.restore();
@@ -902,7 +903,7 @@ function drawIcon(cvs,t,c,tm){
   x.translate(sz/2,sz*.9);
   const s=sz/100*scO(c,t)*.95;x.scale(s,s);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
-  drawO(c,t)(x,palO(c),{t:tm||0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  drawO(c,t)(x,palO(c),{dir:'d',t:tm||0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
 }
 
 /* ---------- animation helpers ---------- */
@@ -926,6 +927,7 @@ async function travel(p,tx,ty){
   const x0=p.px,y0=p.py,dx=tx-x0,dy=ty-y0,dist=Math.hypot(dx,dy);
   if(dist<.02){p.px=tx;p.py=ty;return}
   if(Math.abs(dx)>.05)p.face=dx>0?1:-1;
+  p.vd=Math.abs(dy)>Math.abs(dx)?(dy<0?'u':'d'):'h';
   p.moving=true;
   const nx=-dy/dist,ny=dx/dist;
   const set=k=>{p.px=x0+dx*k;p.py=y0+dy*k};
@@ -971,6 +973,7 @@ async function capture(a,v,m){
   const dx=vx-ax,dy=vy-ay,dist=Math.hypot(dx,dy),ux=dx/dist,uy=dy/dist;
   if(Math.abs(dx)>.05){a.face=dx>0?1:-1}
   v.face=a.face>0?-1:1;
+  a.vd=Math.abs(dy)>Math.abs(dx)?(dy<0?'u':'d'):'h';v.vd=a.vd==='u'?'d':a.vd==='d'?'u':'h';
   a.mood='angry';
   const col=palO(v.c);
   if(a.t!=='Q'){
@@ -2217,7 +2220,7 @@ window.__iconSkin=(cvs,id,t,c)=>{
   const sz=cvs.width,x=cvs.getContext('2d');x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,sz,sz);
   x.translate(sz/2,sz*.93);const sc=sz/100*((sk.sc&&sk.sc[t])||SC[t])*.95;x.scale(sc,sc);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
-  sk.draw[t](x,sk.pal[c],{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  sk.draw[t](x,sk.pal[c],{dir:'d',t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
   if(sk.pending&&sk.pending(t)&&(cvs._rt=(cvs._rt||0)+1)<12)setTimeout(()=>window.__iconSkin(cvs,id,t,c),350);
 };
 window.__forceSkin=n=>{pskin={w:n,b:n};renderCards();renderLost();for(const ic of icons)ic.cv._ik='';bakes.clear()};
