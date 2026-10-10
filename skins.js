@@ -422,12 +422,12 @@ function rkImg(t,d){
   return e;
 }
 function rkFrame(o){
-  const s=o.strike||0;
-  if(s<-.05)return 4;
-  if(s>.05)return s<.3?5:s<.7?6:7;
-  if((o.rear||0)>.05)return o.rear>.6?5:4;
-  if(o.mood==='angry'&&!o.moving)return 6;
-  if(o.moving)return Math.floor((o.ph||0)*1.1)%4;
+  const s=o.strike||0,r=o.rear||0;
+  if(s<-.3)return 4;
+  if(s>.3)return s<.55?5:s<.8?6:7;
+  if(r>.45)return r>.7?5:4;
+  if(o.moving)return Math.floor(o.ph>0?o.ph*1.1:(o.t||0)*9)%4;
+  if(o.mood==='angry')return 6;
   return 0;
 }
 const rkDraw=t=>(c,P,o)=>{
