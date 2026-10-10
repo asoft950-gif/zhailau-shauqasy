@@ -426,7 +426,7 @@ function rkFrame(o){
   if(s<-.3)return 4;
   if(s>.3)return s<.55?5:s<.8?6:7;
   if(r>.45)return r>.7?5:4;
-  if(o.moving)return Math.floor(o.ph>0?o.ph*1.1:(o.t||0)*9)%4;
+  if(o.moving)return Math.floor((o.t||0)*5)%4;
   if(o.mood==='angry')return 6;
   return 0;
 }
