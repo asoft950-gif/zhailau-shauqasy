@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { pushTo, sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
+import { pushTo, giveChest, dayInfo, sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
 import { startBoard, applyMove, gameStatus, pickMove, posKey, evalB } from '../engine.js';
 
 const PC = 'QRBN';
@@ -88,6 +88,7 @@ const watchersOf = async (id) => (await sql.query("SELECT count(*)::int AS n FRO
 async function view(m, uid) {
   const [w, b, w2, b2] = await Promise.all([who(m.white_id), who(m.black_id), m.team ? who(m.white2_id) : null, m.team ? who(m.black2_id) : null]);
   const you = sideOf(m, uid);
+  const tourCode = m.tour_id ? ((await sql.query('SELECT code FROM tours WHERE id=$1', [m.tour_id]))[0] || {}).code || null : null;
   let rematch = null;
   if (m.status === 'done' && m.rematch_id && !m.team) {
     const nm = (await sql.query("SELECT id, status, white_id, black_id FROM matches WHERE id=$1", [m.rematch_id]))[0];
@@ -97,12 +98,62 @@ async function view(m, uid) {
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
-    draw: m.draw_by || null, rematch, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
+    draw: m.draw_by || null, rematch, tourCode, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: (({ aggr: 'Қасқыр', def: 'Тасбақа', trick: 'Түлкі' })[m.persona] || 'Бот') + ' · ' + (['', 'жеңіл', 'орташа', 'қиын'][m.level] || ''), avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
 }
 
+/* ---------- friends' knockout tournaments (4 or 8 players, join by code) ---------- */
+const TOUR_PRIZE = { 4: [150, 50], 8: [300, 100] };
+async function tourMatch(t, w, b, round) {
+  await sql.query("INSERT INTO matches (code,mode,white_id,black_id,is_public,status,tc,tour_id,tour_round,seen_w,seen_b,cw,cb,turn_at) VALUES ($1,'pvp',$2,$3,false,'active',$4,$5,$6,now(),now(),$4::int*1000,$4::int*1000,now())", [newCode(), w, b, t.tc, t.id, round]);
+}
+async function tourRound(t, ids, round) {
+  for (let i = 0; i + 1 < ids.length; i += 2) {
+    const flip = Math.random() < 0.5;
+    await tourMatch(t, flip ? ids[i + 1] : ids[i], flip ? ids[i] : ids[i + 1], round);
+  }
+  await Promise.all(ids.map(id => pushTo(id, { title: 'Жайлау Шайқасы', body: round === 1 ? 'Турнир басталды! Ойыныңа кір 🏆' : round + '-кезең басталды! Ойыныңа кір 🏆', url: '/', tag: 'tour' + t.id })));
+}
+async function tourPay(uid, coins, chest, pre) {
+  const d = dayInfo();
+  for (let i = 1; i <= 3; i++) {
+    const r = await sql.query('INSERT INTO claims (user_id,day,key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING key', [uid, d.key, pre + i]);
+    if (r.length) { await sql.query('UPDATE users SET coins=coins+$2 WHERE id=$1', [uid, coins]); if (chest) await giveChest(uid); return; }
+  }
+}
+async function tourAfter(row, winner) {
+  try {
+    const t = (await sql.query('SELECT * FROM tours WHERE id=$1', [row.tour_id]))[0];
+    if (!t || t.status !== 'active') return;
+    if (winner === null) { await tourMatch(t, row.black_id, row.white_id, row.tour_round); return; }
+    const loser = winner === 'w' ? row.black_id : row.white_id;
+    await sql.query('UPDATE tour_players SET out=true WHERE tour_id=$1 AND user_id=$2', [t.id, loser]);
+    const pend = (await sql.query("SELECT count(*)::int AS n FROM matches WHERE tour_id=$1 AND tour_round=$2 AND status<>'done'", [t.id, row.tour_round]))[0].n;
+    if (pend > 0) return;
+    const alive = (await sql.query('SELECT user_id FROM tour_players WHERE tour_id=$1 AND NOT out ORDER BY seed', [t.id])).map(r => r.user_id);
+    if (alive.length === 1) {
+      const d = await sql.query("UPDATE tours SET status='done', winner_id=$2, runner_id=$3, updated_at=now() WHERE id=$1 AND status='active' RETURNING id", [t.id, alive[0], loser]);
+      if (d.length) {
+        const pr = TOUR_PRIZE[t.size] || TOUR_PRIZE[4];
+        await tourPay(alive[0], pr[0], true, 'tourw');
+        await tourPay(loser, pr[1], false, 'tourr');
+      }
+    } else if (alive.length >= 2) {
+      const adv = await sql.query('UPDATE tours SET round=$2, updated_at=now() WHERE id=$1 AND round=$3 RETURNING id', [t.id, row.tour_round + 1, row.tour_round]);
+      if (adv.length) await tourRound(t, alive, row.tour_round + 1);
+    }
+  } catch (e) { console.error('tour', e); }
+}
+async function tourView(code, uid) {
+  const t = (await sql.query('SELECT * FROM tours WHERE code=$1', [String(code || '').toUpperCase()]))[0];
+  if (!t) return null;
+  const players = await sql.query('SELECT p.user_id AS id, p.out, p.seed, u.username AS name, u.avatar, u.rating FROM tour_players p JOIN users u ON u.id=p.user_id WHERE p.tour_id=$1 ORDER BY p.seed, u.username', [t.id]);
+  const ms = await sql.query('SELECT id, tour_round AS round, white_id, black_id, status, winner, reason FROM matches WHERE tour_id=$1 ORDER BY tour_round, id', [t.id]);
+  const mine = uid ? (ms.find(x => x.status === 'active' && (x.white_id === uid || x.black_id === uid)) || null) : null;
+  return { code: t.code, size: t.size, tc: t.tc, status: t.status, round: t.round, owner: t.owner_id, winner: t.winner_id, runner: t.runner_id, prize: TOUR_PRIZE[t.size] || null, players, matches: ms, mine: mine && mine.id, me: uid || null };
+}
 /* finish a match exactly once and hand out results */
 async function finish(m, winner, reason) {
   const r = await sql.query(
@@ -130,6 +181,7 @@ async function finish(m, winner, reason) {
     if (cr) awards.w = { ...(awards.w || {}), camp: cr };
   }
   if (Object.keys(awards).length) await sql.query('UPDATE matches SET awards=$1::jsonb, ver=ver+1 WHERE id=$2', [JSON.stringify(awards), row.id]);
+  if (row.tour_id) await tourAfter(row, winner);
   return { row, awards };
 }
 
@@ -157,6 +209,15 @@ export default async function handler(req, res) {
         const r = await sql.query("SELECT * FROM matches WHERE status IN ('active','open') AND (white_id=$1 OR black_id=$1 OR white2_id=$1 OR black2_id=$1) ORDER BY updated_at DESC LIMIT 1", [uid]);
         const am = r[0] ? await flagCheck(r[0]) : null;
         return send(res, 200, { match: am && am.status !== 'done' ? await view(am, uid) : (am ? await view(am, uid) : null) });
+      }
+      if (req.query?.tour) {
+        const tv = await tourView(req.query.tour, uid);
+        return tv ? send(res, 200, { tour: tv }) : send(res, 404, { error: 'Турнир табылмады' });
+      }
+      if (req.query?.mytour) {
+        if (!uid) return send(res, 200, { code: null });
+        const r = await sql.query("SELECT t.code FROM tours t JOIN tour_players p ON p.tour_id=t.id WHERE p.user_id=$1 AND (t.status IN ('open','active') OR (t.status='done' AND t.updated_at > now() - interval '10 minutes')) ORDER BY t.id DESC LIMIT 1", [uid]);
+        return send(res, 200, { code: r[0] ? r[0].code : null });
       }
       if (req.query?.live) {
         const r = await sql.query(`SELECT m.id, jsonb_array_length(m.moves)::int AS plies, m.tc, w.username AS wn, b.username AS bn, w.rating AS wr, b.rating AS br,
@@ -248,6 +309,47 @@ export default async function handler(req, res) {
         `INSERT INTO matches (code,mode,white_id,black_id,is_public,status,tc) VALUES ($1,'pvp',$2,$3,$4,'open',$5) RETURNING *`,
         [newCode(), asBlack ? null : uid, asBlack ? uid : null, pub, tc]);
       return send(res, 200, { match: await view(r[0], uid) });
+    }
+    if (b.action === 'tour_create') {
+      if (await limited(req, 'newtour', 10, 600)) return send(res, 429, { error: 'Тым жиі' });
+      const size = [4, 8].includes(Number(b.size)) ? Number(b.size) : 4, tc = TCS.includes(Number(b.tc)) ? Number(b.tc) : 0;
+      await sql.query("DELETE FROM tours WHERE status='open' AND owner_id=$1", [uid]);
+      await sql.query("DELETE FROM tour_players WHERE user_id=$1 AND tour_id IN (SELECT id FROM tours WHERE status='open')", [uid]);
+      const code = 'T' + crypto.randomBytes(3).toString('hex').slice(0, 5).toUpperCase();
+      const t = (await sql.query("INSERT INTO tours (code,owner_id,size,tc) VALUES ($1,$2,$3,$4) RETURNING id", [code, uid, size, tc]))[0];
+      await sql.query('INSERT INTO tour_players (tour_id,user_id) VALUES ($1,$2)', [t.id, uid]);
+      return send(res, 200, { tour: await tourView(code, uid) });
+    }
+    if (b.action === 'tour_join') {
+      if (await limited(req, 'tourjoin', 40, 600)) return send(res, 429, { error: 'Тым жиі' });
+      const code = String(b.code || '').trim().toUpperCase();
+      const t = (await sql.query('SELECT * FROM tours WHERE code=$1', [code]))[0];
+      if (!t) return send(res, 404, { error: 'Мұндай турнир жоқ' });
+      const has = (await sql.query('SELECT 1 FROM tour_players WHERE tour_id=$1 AND user_id=$2', [t.id, uid])).length > 0;
+      if (!has) {
+        if (t.status !== 'open') return send(res, 409, { error: 'Турнир басталып кеткен' });
+        const n = (await sql.query('SELECT count(*)::int AS n FROM tour_players WHERE tour_id=$1', [t.id]))[0].n;
+        if (n >= t.size) return send(res, 409, { error: 'Турнир толы' });
+        await sql.query('INSERT INTO tour_players (tour_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [t.id, uid]);
+        const rows = await sql.query('SELECT user_id FROM tour_players WHERE tour_id=$1', [t.id]);
+        if (rows.length >= t.size) {
+          const st = await sql.query("UPDATE tours SET status='active', round=1, updated_at=now() WHERE id=$1 AND status='open' RETURNING id", [t.id]);
+          if (st.length) {
+            const ids = rows.map(r => r.user_id).sort(() => Math.random() - 0.5);
+            for (let i = 0; i < ids.length; i++) await sql.query('UPDATE tour_players SET seed=$3 WHERE tour_id=$1 AND user_id=$2', [t.id, ids[i], i + 1]);
+            await tourRound(t, ids, 1);
+          }
+        }
+      }
+      return send(res, 200, { tour: await tourView(code, uid) });
+    }
+    if (b.action === 'tour_leave') {
+      const t = (await sql.query('SELECT * FROM tours WHERE code=$1', [String(b.code || '').toUpperCase()]))[0];
+      if (t && t.status === 'open') {
+        if (t.owner_id === uid) await sql.query('DELETE FROM tours WHERE id=$1', [t.id]);
+        else await sql.query('DELETE FROM tour_players WHERE tour_id=$1 AND user_id=$2', [t.id, uid]);
+      }
+      return send(res, 200, { ok: true });
     }
     if (b.action === 'team') {
       if (await limited(req, 'newteam', 20, 600)) return send(res, 429, { error: 'Тым жиі' });

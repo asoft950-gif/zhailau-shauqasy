@@ -138,7 +138,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
       <div class="rcta" id="resCta" hidden></div>
-      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resAn" type="button">🔍 Талдау</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn" id="resRe" type="button" hidden>🔁 Реванш</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
+      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resAn" type="button">🔍 Талдау</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn" id="resRe" type="button" hidden>🔁 Реванш</button><button class="btn" id="resTour" type="button" hidden>🏆 Турнир кестесі</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
     </div>
     <div class="rpanel" id="rpanel" hidden>
       <div class="rpbtns"><button type="button" id="rpFirst" aria-label="Басына">⏮</button><button type="button" id="rpPrev" aria-label="Артқа">◀</button><button type="button" id="rpPlay" class="main" aria-label="Ойнату">▶</button><button type="button" id="rpNext" aria-label="Алға">▶︎|</button><button type="button" id="rpLast" aria-label="Соңына">⏭</button></div>
@@ -1358,7 +1358,8 @@ function refreshUI(){
   renderEmo();renderWatchInfo();
   $('#bUndo').hidden=!!net||mode==='net'||mode==='puz';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
-  {const rb=$('#resRe'),can=!!(net&&net.you&&net.mode==='pvp'&&!net.team&&net.status==='done'&&over&&PL().isIn());
+  $('#resTour').hidden=!(net&&net.tourCode&&net.status==='done'&&over);
+  {const rb=$('#resRe'),can=!!(net&&net.you&&net.mode==='pvp'&&!net.team&&!net.tourCode&&net.status==='done'&&over&&PL().isIn());
    rb.hidden=!can;if(can){const rm=net.rematch;rb.textContent=rm?(rm.byYou?'🔁 Реванш ұсынылды…':'🔁 Реванш қабылдау'):'🔁 Реванш';rb.disabled=!!(rm&&rm.byYou)}}
   {const pv=net&&net.you&&(net.mode==='pvp'||net.mode==='ai')&&net.status==='active'&&!over&&net.moves.length>=2;
    const bd=$('#bDraw');bd.hidden=!pv;bd.disabled=!!pv&&net.draw===net.you;bd.textContent=pv&&net.draw===net.you?'🤝 Ұсыныс жіберілді…':'🤝 Тең ұсыну';
@@ -1381,7 +1382,7 @@ setInterval(updateClaim,5000);
 const teamCount=n=>[n.white,n.white2,n.black,n.black2].filter(x=>x&&x.id).length;
 function adoptNet(m){
   clearTimeout(pollT);
-  net={rematch:m.rematch||null,draw:m.draw||null,team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
+  net={tourCode:m.tourCode||null,rematch:m.rematch||null,draw:m.draw||null,team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
   setClk(m);
   lastChange=Date.now();
 }
@@ -1401,7 +1402,7 @@ function netApply(m){
   if(!net||m.id!==net.id)return;
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
-  net.rematch=m.rematch||null;net.draw=m.draw||null;net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
+  net.tourCode=m.tourCode||null;net.rematch=m.rematch||null;net.draw=m.draw||null;net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
   setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
@@ -1509,6 +1510,7 @@ function showLobby(kind){
     const b=el('button','btn','Кіру / Тіркелу');b.onclick=()=>PL().login();card.append(b);
     return;
   }
+  if(kind==='tour'){renderTour(card);return}
   if(kind==='wait'&&net){
     card.append(el('h3','',net.team?'👥 Командалық ойын 2×2':net.code&&!net.public?'Дос күтілуде…':'Қарсылас іздеп жатырмыз…'));
     if(net.team){
@@ -1542,13 +1544,14 @@ function showLobby(kind){
   const q=el('button','btn','⚡ Жылдам ойын');q.onclick=()=>startPvp('quick');
   const c=el('button','btn ghost','🤝 Дос шақыру');c.onclick=()=>startPvp('create');
   const tm=el('button','btn ghost','👥 2×2 командалық');tm.onclick=()=>startPvp('team');
+  const tr=el('button','btn ghost',tour.code?'🏆 Қазіргі турнир':'🏆 Достармен турнир');tr.onclick=()=>{if(tour.code)openTourPanel();else{tour.menu=true;showLobby('tour')}};
   const row=el('div','jrow');
   const inp=el('input');inp.placeholder='Код';inp.maxLength=8;inp.autocapitalize='characters';inp.setAttribute('aria-label','Ойын коды');
   const jb=el('button','btn ghost','Кіру');
   jb.onclick=()=>joinCode(inp.value);
   inp.onkeydown=e=>{if(e.key==='Enter')joinCode(inp.value)};
   row.append(inp,jb);
-  card.append(q,c,tm,row);
+  card.append(q,c,tm,tr,row);
   loadLive(card);
 }
 async function startPvp(action){
@@ -1559,6 +1562,11 @@ async function startPvp(action){
 async function joinCode(code){
   code=String(code||'').trim();
   if(!code)return;
+  if(/^T/i.test(code)){
+    const r=await napi({action:'tour_join',code});
+    if(!r.tour){PL().toast('⚠️',r.error||'Қосыла алмадық');return}
+    setMode('net',true);tour.menu=false;tour.code=r.tour.code;tour.data=r.tour;startTourWatch();openTourPanel();return;
+  }
   const r=await napi({action:'join',code});
   if(!r.match){PL().toast('⚠️',r.error||'Қосыла алмадық');return}
   openPvp(r.match,false);
@@ -1571,6 +1579,80 @@ function openPvp(m,showCode){
   else{showLobby('wait');renderBars();refreshUI()}
   startPoll();
 }
+
+/* ---- friends' tournaments ---- */
+const tour={code:null,data:null,menu:false,view:false,timer:0,opened:new Set(),size:4};
+function openTourPanel(){setMode('net',true);if(net&&net.status!=='open'&&!(net.you&&net.status==='active')){net=null;resetLocal();renderBars()}tour.menu=false;tour.view=true;showLobby('tour');startTourWatch()}
+function startTourWatch(){
+  clearInterval(tour.timer);if(!tour.code)return;
+  const tick=async()=>{
+    if(!tour.code)return;
+    const r=await napi(null,'?tour='+tour.code);
+    if(!r.tour){if(r.error){tour.code=null;tour.data=null;clearInterval(tour.timer);if(tour.view)showLobby('menu')}return}
+    const prev=tour.data;tour.data=r.tour;
+    if(tour.view&&!$('#lobby').hidden)showLobby('tour');
+    const t=r.tour;
+    if(t.mine&&!tour.opened.has(t.mine)&&!(net&&net.you&&net.status==='active')){
+      tour.opened.add(t.mine);
+      const g=await napi(null,'?id='+t.mine);
+      if(g.match){tour.view=false;PL().toast('🏆','Турнир ойыны басталды!',t.round+'-кезең');setMode('net',true);if(net&&net.status==='done'){net=null}resetLocal();openPvp(g.match,true)}
+    }
+    if(t.status==='done'&&(!prev||prev.status!=='done')){const w=t.players.find(p=>p.id===t.winner);PL().toast('🏆','Турнир аяқталды',(w?w.name:'?')+' жеңді!');PL().refresh()}
+    if(t.status==='done'&&!tour.view&&!(net&&net.status==='active')){clearInterval(tour.timer)}
+  };
+  tour.timer=setInterval(tick,3000);tick();
+}
+function renderTour(card){
+  if(tour.menu){
+    card.append(el('h3','','🏆 Достармен турнир'),el('p','xpt','4 немесе 8 адам кодпен қосылады, толғанда өзі басталады. Жеңген келесі кезеңге өтеді, тең ойын қайта ойналады (түстер ауысады). Жеңімпазға тиын мен 🎁.'));
+    const sg=el('div','seg');sg.setAttribute('role','group');
+    for(const n of [4,8]){const b=el('button','',n+' ойыншы');b.type='button';b.setAttribute('aria-pressed',tour.size===n);b.onclick=()=>{tour.size=n;sg.querySelectorAll('button').forEach(y=>y.setAttribute('aria-pressed',y===b))};sg.append(b)}
+    card.append(sg);
+    const go=el('button','btn','Турнир құру ('+TCN(tcSel)+')');
+    go.onclick=async()=>{go.disabled=true;const r=await napi({action:'tour_create',size:tour.size,tc:tcSel});if(!r.tour){go.disabled=false;PL().toast('⚠️',r.error||'Қате');return}tour.menu=false;tour.code=r.tour.code;tour.data=r.tour;tour.view=true;startTourWatch();showLobby('tour')};
+    const bk=el('button','btn ghost','Артқа');bk.onclick=()=>{tour.menu=false;showLobby('menu')};
+    card.append(go,bk);return;
+  }
+  const t=tour.data;
+  if(!t){card.append(el('h3','','🏆 Турнир'),el('p','','Жүктелуде…'));return}
+  const nm=id=>{const p=t.players.find(x=>x.id===id);return p?p.name:'?'};
+  card.append(el('h3','','🏆 Турнир · '+t.size+' ойыншы · '+TCN(t.tc)));
+  if(t.status==='open'){
+    card.append(el('p','',t.players.length+' / '+t.size+' ойыншы қосылды'));
+    card.append(el('p','','Достарыңа осы кодты жібер:'),el('div','code',t.code));
+    const lk=location.origin+'/?join='+t.code;
+    const cp=el('button','btn','Сілтемені көшіру');cp.onclick=async()=>{try{await navigator.clipboard.writeText(lk);PL().toast('📋','Көшірілді',lk)}catch(e){PL().toast('📋','Сілтеме',lk,null,9000)}};card.append(cp);
+    const ul=el('div','tplayers');t.players.forEach(p=>ul.append(el('span','tp'+(p.id===t.owner?' own':''),(p.id===t.owner?'👑 ':'')+p.name)));card.append(ul);
+    const lv=el('button','btn ghost',t.owner===t.me?'Турнирді жою':'Шығу');
+    lv.onclick=async()=>{await napi({action:'tour_leave',code:t.code});tour.code=null;tour.data=null;tour.view=false;clearInterval(tour.timer);showLobby('menu')};
+    card.append(lv);return;
+  }
+  const me=t.players.find(p=>p.id===t.me);
+  if(t.status==='done'){
+    const w=t.players.find(p=>p.id===t.winner);
+    card.append(el('p','tbig','🏆 Жеңімпаз: '+(w?w.name:'?')),el('p','xpt','2-орын: '+nm(t.runner)+(t.prize?' · Жүлде: 🪙'+t.prize[0]+' + 🎁 / 🪙'+t.prize[1]:'')));
+  }else{
+    card.append(el('p','xpt',t.round+'-кезең · '+(me&&me.out?'Сен ойыннан шықтың, кестені қарап отыр':'Сен ойында')));
+    if(t.mine){const b=el('button','btn','▶ Ойынға кіру');b.onclick=async()=>{const g=await napi(null,'?id='+t.mine);if(g.match){tour.opened.add(t.mine);tour.view=false;setMode('net',true);if(net&&net.status==='done')net=null;resetLocal();openPvp(g.match,true)}};card.append(b)}
+  }
+  const rounds=[...new Set(t.matches.map(m=>m.round))];
+  for(const rd of rounds){
+    card.append(el('h4','',rd+'-кезең'));
+    for(const m of t.matches.filter(x=>x.round===rd)){
+      const res=m.status==='done'?(m.winner==='w'?nm(m.white_id):m.winner==='b'?nm(m.black_id):'тең'):'ойнап жатыр';
+      const row=el('div','tmatch'+(m.status==='active'?' live':''),nm(m.white_id)+' ⚔ '+nm(m.black_id)+' → '+res);
+      if(m.status==='active'&&m.id!==t.mine){row.onclick=()=>watchMatch(m.id);row.classList.add('watch')}
+      card.append(row);
+    }
+  }
+  const bk=el('button','btn ghost','Лоббиге қайту');bk.onclick=()=>{tour.view=false;if(t.status==='done'){tour.code=null;tour.data=null;clearInterval(tour.timer)}showLobby('menu')};
+  card.append(bk);
+}
+$('#resTour').addEventListener('click',()=>{
+  if(net&&net.status==='done'){net=null;resetLocal();setFlip(false);renderBars()}
+  $('#result').hidden=true;tour.menu=false;tour.view=true;showLobby('tour');startTourWatch();
+});
+(async()=>{try{await PL().ready;if(!PL().isIn())return;const r=await napi(null,'?mytour=1');if(r.code){tour.code=r.code;startTourWatch()}}catch(e){}})();
 
 /* ---- flow ---- */
 async function newGame(){
