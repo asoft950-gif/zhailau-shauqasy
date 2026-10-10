@@ -582,10 +582,10 @@ function mk(t,c,id,i,face){
   return p;
 }
 function snap(){
-  return {st:JSON.parse(JSON.stringify(stat)),b:board.map(p=>p?{t:p.t,c:p.c,id:p.id,face:p.face}:null),turn,lost:{w:lost.w.slice(),b:lost.b.slice()},last:last&&{f:last.f,t:last.t}};
+  return {st:JSON.parse(JSON.stringify(stat)),b:board.slice(0,64).map(p=>p?{t:p.t,c:p.c,id:p.id,face:p.face}:null),cs:[board[64],board[65]],turn,lost:{w:lost.w.slice(),b:lost.b.slice()},last:last&&{f:last.f,t:last.t}};
 }
 function restoreSnap(s){
-  board=s.b.map((p,i)=>p?mk(p.t,p.c,p.id,i,p.face):null);
+  board=s.b.map((p,i)=>p?mk(p.t,p.c,p.id,i,p.face):null);board[64]=s.cs?s.cs[0]:15;board[65]=s.cs?s.cs[1]:-1;
   turn=s.turn;lost={w:s.lost.w.slice(),b:s.lost.b.slice()};last=s.last;if(s.st)stat=JSON.parse(JSON.stringify(s.st));
   sel=-1;selMoves=[];over=false;winner=null;document.body.classList.remove("finale");parts=[];
   $('#result').hidden=true;
@@ -1006,8 +1006,32 @@ async function capture(a,v,m){
   a.px=vx;a.py=vy;
 }
 
+function mInfo(m){
+  const a=board[m.f];if(!a)return {};
+  const cf=m.f&7,ct=m.t&7,r=m.f>>3;
+  if(a.t==='K'&&Math.abs(ct-cf)===2)return {rf:r*8+(ct>cf?7:0),rt:r*8+(ct>cf?5:3)};
+  if(a.t==='P'&&cf!==ct&&!board[m.t])return {ep:r*8+ct};
+  return {};
+}
+/* mutate the board for a move (castling rook, en-passant victim, engine state); returns the captured piece */
+function commit(m){
+  const a=board[m.f],ii=mInfo(m),ns=applyMove(board,m);
+  let v=board[m.t];
+  if(ii.ep!==undefined){v=board[ii.ep];board[ii.ep]=null}
+  board[m.t]=a;board[m.f]=null;
+  if(ii.rf!==undefined){const rk=board[ii.rf];board[ii.rt]=rk;board[ii.rf]=null;const f=rk.face;rest(rk,ii.rt>>3,ii.rt&7);rk.face=f}
+  board[64]=ns[64];board[65]=ns[65];
+  return v;
+}
 async function animateMove(m){
-  const a=board[m.f],v=board[m.t],tx=m.t&7,ty=m.t>>3;
+  const ii=mInfo(m);
+  const a=board[m.f],v=ii.ep!==undefined?board[ii.ep]:board[m.t],tx=m.t&7,ty=m.t>>3;
+  if(ii.rf!==undefined){
+    const rk=board[ii.rf];
+    pop(tx,ty,'Рокировка!','#FFF2A8');
+    await Promise.all([travel(a,tx,ty),travel(rk,ii.rt&7,ii.rt>>3)]);
+    a.mood='idle';rk.mood='idle';return;
+  }
   if(v){
     const big=!REDUCE&&(v.t==='Q'||v.t==='K'||v.t==='R');
     if(big){slowF=1.6;stage.classList.add('cine')}
@@ -1040,7 +1064,7 @@ function renderLost(){
 function afterMove(silent){
   allMoves=legal(board,turn);
   checked=inChk(board,turn);
-  const onlyK=board.every(p=>!p||p.t==='K');
+  const onlyK=board.slice(0,64).every(p=>!p||p.t==='K');
   if(!allMoves.length){over=true;winner=checked?opp(turn):null}
   else if(onlyK){over=true;winner=null}
   if(over){
@@ -1083,10 +1107,10 @@ async function playMove(m,remote){
   busy=true;hist.push(snap());sel=-1;selMoves=[];if(!net&&!rp)locLog.push(m.f|m.t<<6|(m.promo?1<<12:0));
   await animateMove(m);
   if(g!==gen)return;
-  const a=board[m.f],v=board[m.t];
+  const a=board[m.f],ii0=mInfo(m),v=ii0.ep!==undefined?board[ii0.ep]:board[m.t];
   if(mode==='ai'&&a.c==='w'){stat.moves++;if(v){stat.caps++;stat.byPiece[a.t]=(stat.byPiece[a.t]||0)+1}if(m.promo)stat.promos++}
   if(v)lost[v.c].push(v.t);
-  board[m.t]=a;board[m.f]=null;
+  commit(m);
   const face=a.face;rest(a,m.t>>3,m.t&7);a.face=face;
   last={f:m.f,t:m.t};
   if(net)net.applied++;
@@ -1107,7 +1131,7 @@ function aiMove(col,level){
   if(!aiW)return Promise.resolve(sync());
   return new Promise(res=>{
     const id=++aiSeq;aiPend[id]=m=>res(m===undefined?sync():m);
-    aiW.postMessage({id,b:board.map(p=>p?{t:p.t,c:p.c,id:p.id}:null),col,level});
+    aiW.postMessage({id,b:board.slice(0,64).map(p=>p?{t:p.t,c:p.c,id:p.id}:null),cs:[board[64],board[65]],col,level});
   });
 }
 async function aiTurn(){
@@ -1193,7 +1217,7 @@ let pollT=0,lastChange=0,pumping=false;
 
 function resetLocal(){
   locLog=[];gen++;busy=false;over=false;winner=null;document.body.classList.remove("finale");sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;stat={moves:0,caps:0,byPiece:{},promos:0};reported=false;
-  board=new Array(64).fill(null);
+  board=new Array(64).fill(null);board[64]=15;board[65]=-1;
   for(let c=0;c<8;c++){
     board[c]=mk(ORDER[c],'b',0,c);
     board[8+c]=mk('P','b',0,8+c);
@@ -1207,9 +1231,9 @@ function resetLocal(){
 function restoreFromMoves(moves){
   resetLocal();
   for(const c of moves){
-    const m=dec(c),a=board[m.f],v=board[m.t];
+    const m=dec(c),a=board[m.f],ii0=mInfo(m),v=ii0.ep!==undefined?board[ii0.ep]:board[m.t];
     if(v)lost[v.c].push(v.t);
-    board[m.t]=a;board[m.f]=null;
+    commit(m);
     const face=a.face;rest(a,m.t>>3,m.t&7);a.face=face;
     if(m.promo)a.t='Q';
     last={f:m.f,t:m.t};turn=opp(turn);
@@ -1719,7 +1743,7 @@ async function startPuzzle(){
   if(g!==gen)return;
   busy=false;
   if(!r.board){setStatus('Жұмбақ жүктелмеді','w');PL().toast('⚠️',r.error||'Қате');return}
-  board=r.board.map((p,i)=>p?mk(p.t,p.c,0,i):null);
+  board=r.board.map((p,i)=>p?mk(p.t,p.c,0,i):null);board[64]=0;board[65]=-1;
   idc=100;turn='w';last=null;lost={w:[],b:[]};hist=[];locLog=[];
   pz={n:r.n,solved:r.solved,moves:[],stage:0,tries:0,reward:r.reward,done:false};
   $('#result').hidden=true;

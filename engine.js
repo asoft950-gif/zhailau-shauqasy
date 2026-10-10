@@ -17,7 +17,7 @@ function pseudo(b,i,out){
     }
     for(const dc of [-1,1]){
       const cc=c+dc;
-      if(inb(r1,cc)){const q=b[r1*8+cc];if(q&&q.c!==col)add(r1*8+cc,r1===last)}
+      if(inb(r1,cc)){const q=b[r1*8+cc];if(q&&q.c!==col)add(r1*8+cc,r1===last);else if(!q&&b[65]===r1*8+cc)add(r1*8+cc,false)}
     }
   }else if(p.t==='N'||p.t==='K'){
     const D=p.t==='N'?N_D:K_D;
@@ -40,11 +40,38 @@ function pseudo(b,i,out){
     }
   }
 }
+/* castling / en passant are derived from the position. State lives in b[64] (castling rights bits: 1 wK, 2 wQ, 4 bK, 8 bQ) and b[65] (en-passant target square or -1). */
+function moveInfo(b,m){
+  const p=b[m.f],r=m.f>>3,cf=m.f&7,ct=m.t&7;
+  let cr=b[64]|0,eps=-1,rf=-1,rt=-1,ep=-1;
+  if(p.t==='K'&&Math.abs(ct-cf)===2){rf=r*8+(ct>cf?7:0);rt=r*8+(ct>cf?5:3)}
+  if(p.t==='P'){
+    if(cf!==ct&&!b[m.t])ep=r*8+ct;
+    if(Math.abs((m.t>>3)-r)===2)eps=(((m.t>>3)+r)>>1)*8+cf;
+  }
+  if(p.t==='K')cr&=p.c==='w'?~3:~12;
+  for(const q of [m.f,m.t]){if(q===63)cr&=~1;else if(q===56)cr&=~2;else if(q===7)cr&=~4;else if(q===0)cr&=~8}
+  return {rf,rt,ep,cr,eps};
+}
 function applyMove(b,m){
-  const n=b.slice(),p=n[m.f];
+  const n=b.slice(),p=n[m.f],i=moveInfo(b,m);
   n[m.f]=null;
   n[m.t]=m.promo?{t:'Q',c:p.c,id:p.id}:p;
+  if(i.rf>=0){n[i.rt]=n[i.rf];n[i.rf]=null}
+  if(i.ep>=0)n[i.ep]=null;
+  n[64]=i.cr;n[65]=i.eps;
   return n;
+}
+function castles(b,col,out){
+  const cr=b[64]|0,base=col==='w'?56:0,kb=col==='w'?1:4,qb=col==='w'?2:8;
+  if(!(cr&(kb|qb)))return;
+  const k=b[base+4];
+  if(!k||k.t!=='K'||k.c!==col)return;
+  const en=opp(col);
+  if(attacked(b,base+4,en))return;
+  const rk=i=>{const r=b[base+i];return r&&r.t==='R'&&r.c===col};
+  if((cr&kb)&&rk(7)&&!b[base+5]&&!b[base+6]&&!attacked(b,base+5,en)&&!attacked(b,base+6,en))out.push({f:base+4,t:base+6,promo:false});
+  if((cr&qb)&&rk(0)&&!b[base+1]&&!b[base+2]&&!b[base+3]&&!attacked(b,base+3,en)&&!attacked(b,base+2,en))out.push({f:base+4,t:base+2,promo:false});
 }
 function attacked(b,sq,by){
   const r=sq>>3,c=sq&7;
@@ -91,6 +118,7 @@ function legal(b,col){
     const n=applyMove(b,m);
     if(!inChk(n,col))out.push(m);
   }
+  castles(b,col,out);
   return out;
 }
 function evalB(b){
@@ -162,13 +190,15 @@ export function startBoard() {
     b[c] = { t: ORDER[c], c: 'b' }; b[8 + c] = { t: 'P', c: 'b' };
     b[48 + c] = { t: 'P', c: 'w' }; b[56 + c] = { t: ORDER[c], c: 'w' };
   }
+  b[64] = 15; b[65] = -1;
   return b;
 }
 /* game state after the side `turn` is to move: legal moves, check, and result (winner 'w'|'b'|null) */
 export function gameStatus(b, turn) {
   const moves = legal(b, turn);
   const checked = inChk(b, turn);
-  const onlyK = b.every(p => !p || p.t === 'K');
+  let onlyK = true;
+  for (let i = 0; i < 64; i++) { const p = b[i]; if (p && p.t !== 'K') { onlyK = false; break; } }
   if (!moves.length) return { over: true, winner: checked ? opp(turn) : null, checked, moves, reason: checked ? 'mate' : 'stalemate' };
   if (onlyK) return { over: true, winner: null, checked, moves, reason: 'bare' };
   return { over: false, winner: null, checked, moves, reason: '' };
@@ -185,4 +215,4 @@ export function pickMove(b, col, level, noise = 0) {
   }
   return bestMove(b, col, lv === 2 ? 2 : 3);
 }
-export { N_D, K_D, B_D, R_D, VAL, inb, opp, pseudo, applyMove, attacked, kingSq, inChk, legal, evalB, orderMoves, qs, nega, bestMove };
+export { N_D, K_D, B_D, R_D, VAL, inb, opp, pseudo, applyMove, moveInfo, attacked, kingSq, inChk, legal, evalB, orderMoves, qs, nega, bestMove };

@@ -32,7 +32,7 @@ function replay(moves) {
   const log = [];
   for (const c of moves) {
     const m = dec(c), a = b[m.f], v = b[m.t];
-    log.push({ side: a.c, piece: a.t, cap: v ? v.t : null, promo: m.promo });
+    log.push({ side: a.c, piece: a.t, cap: v ? v.t : (a.t === 'P' && (m.f & 7) !== (m.t & 7) ? 'P' : null), promo: m.promo });
     b = applyMove(b, m);
   }
   return { b, log };
