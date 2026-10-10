@@ -210,6 +210,25 @@ export function gameStatus(b, turn) {
   if (onlyK) return { over: true, winner: null, checked, moves, reason: 'bare' };
   return { over: false, winner: null, checked, moves, reason: '' };
 }
+/* post-game analysis: how much worse was the played move than the best one at ply k (centipawns, 3-ply search) */
+const PCODE = 'QRBN';
+const decI = (c) => ({ f: c & 63, t: (c >> 6) & 63, promo: (c >> 12) ? PCODE[(c >> 12) - 1] || 'Q' : false });
+export function analyzePly(moves, k) {
+  let b = startBoard();
+  for (let i = 0; i < k; i++) b = applyMove(b, decI(moves[i]));
+  const col = k % 2 ? 'b' : 'w', played = decI(moves[k]);
+  const clamp = v => Math.max(-1500, Math.min(1500, v));
+  const ms = legal(b, col);
+  orderMoves(b, ms);
+  let best = -Infinity, bm = null, pl = null;
+  for (const m of ms) {
+    const sc = clamp(-nega(applyMove(b, m), 2, -Infinity, Infinity, opp(col), 1));
+    if (sc > best) { best = sc; bm = m; }
+    if (m.f === played.f && m.t === played.t && (!played.promo || m.promo === played.promo)) pl = sc;
+  }
+  if (pl === null) pl = best;
+  return { loss: Math.max(0, best - pl), best: bm ? { f: bm.f, t: bm.t } : null, ev: (col === 'w' ? 1 : -1) * pl };
+}
 /* difficulty: 1 easy (shallow + mistakes), 2 medium, 3 hard */
 export function pickMove(b, col, level, noise = 0) {
   const lv = level === 1 || level === 2 ? level : 3;

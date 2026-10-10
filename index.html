@@ -132,12 +132,13 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
       <div class="rcta" id="resCta" hidden></div>
-      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn" id="resRe" type="button" hidden>🔁 Реванш</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
+      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resAn" type="button">🔍 Талдау</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn" id="resRe" type="button" hidden>🔁 Реванш</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
     </div>
     <div class="rpanel" id="rpanel" hidden>
       <div class="rpbtns"><button type="button" id="rpFirst" aria-label="Басына">⏮</button><button type="button" id="rpPrev" aria-label="Артқа">◀</button><button type="button" id="rpPlay" class="main" aria-label="Ойнату">▶</button><button type="button" id="rpNext" aria-label="Алға">▶︎|</button><button type="button" id="rpLast" aria-label="Соңына">⏭</button></div>
       <input type="range" id="rpBar" min="0" max="0" value="0" aria-label="Жүріс">
-      <div class="rpinfo"><span id="rpTxt"></span><button type="button" class="ghost" id="rpShare">📤 Бөлісу</button><button type="button" class="ghost" id="rpExit">✕ Шығу</button></div>
+      <div class="anbox" id="anBox" hidden></div>
+      <div class="rpinfo"><span id="rpTxt"></span><button type="button" class="ghost" id="rpAn">🔍 Талдау</button><button type="button" class="ghost" id="rpShare">📤 Бөлісу</button><button type="button" class="ghost" id="rpExit">✕ Шығу</button></div>
     </div>
   </div>
 
@@ -176,7 +177,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 
 <script type="module">
 import {makeSkins} from './skins.js';
-import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard,posKey} from './engine.js';
+import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard,posKey,analyzePly} from './engine.js';
 
 (()=>{
 'use strict';
@@ -1702,7 +1703,8 @@ const gameMoves=()=>net&&net.moves?net.moves.slice():locLog.slice();
 function rpShow(){
   const n=rp.moves.length;
   $('#rpBar').max=n;$('#rpBar').value=rp.k;
-  $('#rpTxt').textContent=rp.k+' / '+n+' жүріс';
+  $('#rpTxt').textContent=rp.k+' / '+n+' жүріс'+anNote();
+  anPaint();
   $('#rpPlay').textContent=rp.auto?'⏸':'▶';
 }
 function rpBars(){
@@ -1735,7 +1737,7 @@ async function rpPlay(){
   }
   if(rp&&run===rp.run){rp.auto=false;rpShow()}
 }
-function startReplay(moves,info){
+function startReplay(moves,info,noAuto){
   clearTimeout(pollT);
   if(net&&net.mode==='pvp'&&net.status==='active')return;
   rp={moves,k:0,auto:false,run:0,white:info&&info.white,black:info&&info.black,id:info&&info.id};
@@ -1745,7 +1747,7 @@ function startReplay(moves,info){
   $('#result').hidden=true;$('#rpanel').hidden=false;$('#lvlSeg').hidden=true;
   rp.run=0;rpBars();rpShow();
   setStatus('Қайта көру','w');
-  rpPlay();
+  if(!noAuto)rpPlay();
 }
 function exitReplay(){
   rp=null;$('#rpanel').hidden=true;$('#pbTop').hidden=$('#pbBot').hidden=true;
@@ -1761,6 +1763,72 @@ $('#rpExit').addEventListener('click',exitReplay);
 $('#resRep').addEventListener('click',()=>{
   const mv=gameMoves();if(!mv.length)return;
   startReplay(mv,net?{white:net.white,black:net.black,id:net.id}:{white:{name:'Күн'},black:{name:'Түн'}});
+});
+
+/* ---- game analysis (engine runs in a worker, 3-ply per move) ---- */
+const AN_CLS=[[5,'best','★','Ең жақсы жүріс'],[30,'good','','Жақсы'],[70,'ok','','Қалыпты'],[160,'inacc','?!','Дәлсіздік'],[360,'mist','?','Қате'],[1e9,'blun','??','Үлкен қате']];
+const anCls=l=>AN_CLS.find(c=>l<=c[0]);
+const sqn=s=>String.fromCharCode(97+(s&7))+(8-(s>>3));
+function anNote(){
+  if(!rp||!rp.an||!rp.an.res||rp.k<1)return '';
+  const r=rp.an.res[rp.k-1];if(!r)return '';
+  const c=anCls(r.loss);
+  return ' · '+c[3]+(c[1]==='inacc'||c[1]==='mist'||c[1]==='blun'?' (жақсысы: '+sqn(r.best.f)+'→'+sqn(r.best.t)+')':'');
+}
+function anPaint(){
+  const box=$('#anBox');
+  if(!rp||!rp.an){box.hidden=true;return}
+  box.hidden=false;
+  if(!rp.an.res){box.textContent='Талдау: '+rp.an.done+' / '+rp.moves.length+'…';return}
+  const cv=box.querySelector('canvas');if(!cv)return;
+  const x=cv.getContext('2d'),W=cv.width,H=cv.height,n=rp.an.res.length,bw=W/Math.max(n,1);
+  x.clearRect(0,0,W,H);
+  x.fillStyle='rgba(128,128,128,.25)';x.fillRect(0,H/2-.5,W,1);
+  rp.an.res.forEach((r,k)=>{
+    const v=Math.max(-600,Math.min(600,r.ev))/600*(H/2-2);
+    x.fillStyle=k===rp.k-1?'#e0a020':(v>=0?'#d9b24a':'#5560D6');
+    x.globalAlpha=k===rp.k-1?1:.75;
+    x.fillRect(k*bw,v>=0?H/2-v:H/2,Math.max(1,bw-1),Math.max(1,Math.abs(v)));
+  });
+  x.globalAlpha=1;
+  box.querySelectorAll('.anchip').forEach((c,k)=>c.classList.toggle('cur',k===rp.k-1));
+}
+function anRender(){
+  const box=$('#anBox');box.textContent='';
+  const res=rp.an.res,acc=s=>{const l=res.filter((_,k)=>k%2===s).map(r=>Math.min(r.loss,300));return l.length?Math.round(100*Math.exp(-(l.reduce((a,b)=>a+b,0)/l.length)/120)):0};
+  const names=[rp.white&&rp.white.name||'Күн',rp.black&&rp.black.name||'Түн'];
+  const sum=document.createElement('div');sum.className='ansum';
+  sum.textContent='Дәлдік: '+names[0]+' '+acc(0)+'% · '+names[1]+' '+acc(1)+'%';box.append(sum);
+  const cv=document.createElement('canvas');cv.width=600;cv.height=90;cv.className='angraph';
+  cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect();rpSeek(Math.floor((e.clientX-r.left)/r.width*res.length)+1)});
+  box.append(cv);
+  const cl=document.createElement('div');cl.className='anchips';
+  res.forEach((r,k)=>{
+    const c=anCls(r.loss),b=document.createElement('button');b.type='button';b.className='anchip '+c[1]+(k%2?' bl':' wh');
+    b.textContent=(k%2?'':(k/2+1|0)+'.')+(c[2]||'·');b.title=c[3];b.onclick=()=>rpSeek(k+1);cl.append(b);
+  });
+  box.append(cl);
+  anPaint();
+}
+async function runAnalysis(){
+  if(!rp)return;
+  if(rp.an&&rp.an.res){anRender();return}
+  if(rp.an)return;
+  const moves=rp.moves.slice(),an=rp.an={done:0,res:null};
+  anPaint();
+  const fin=res=>{if(rp&&rp.an===an){an.res=res;anRender();rpShow()}};
+  try{
+    const w=new Worker('engine-worker.js',{type:'module'});
+    w.onmessage=e=>{if(e.data.progress){an.done=e.data.progress;if(rp&&rp.an===an&&!an.res)anPaint()}if(e.data.done){w.terminate();fin(e.data.res)}};
+    w.onerror=async()=>{w.terminate();const res=[];for(let k=0;k<moves.length;k++){res.push(analyzePly(moves,k));an.done=k+1;anPaint();await wait(0)}fin(res)};
+    w.postMessage({analyze:true,id:1,moves});
+  }catch(e){const res=[];for(let k=0;k<moves.length;k++){res.push(analyzePly(moves,k));an.done=k+1;anPaint();await wait(0)}fin(res)}
+}
+$('#rpAn').addEventListener('click',runAnalysis);
+$('#resAn').addEventListener('click',()=>{
+  const mv=gameMoves();if(mv.length<2)return;
+  startReplay(mv,net?{white:net.white,black:net.black,id:net.id}:{white:{name:'Күн'},black:{name:'Түн'}},true);
+  rpSeek(0);runAnalysis();
 });
 
 /* share card (PNG) */

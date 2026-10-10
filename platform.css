@@ -231,3 +231,15 @@
 
 .drawbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:2px solid #e0a020;border-radius:14px;padding:8px 12px;font-weight:700;animation:pulse 1.4s infinite}
 .drawbox[hidden]{display:none}
+
+.anbox{display:grid;gap:6px;margin:6px 0;font-size:.9rem}
+.ansum{font-weight:700}
+.angraph{width:100%;height:60px;background:rgba(128,128,128,.12);border-radius:8px;cursor:pointer}
+.anchips{display:flex;flex-wrap:wrap;gap:3px}
+.anchip{border:1px solid var(--line);background:var(--panel);color:inherit;border-radius:8px;padding:2px 6px;font:inherit;font-size:.75rem;cursor:pointer;min-width:28px}
+.anchip.bl{opacity:.9}
+.anchip.cur{outline:2px solid #e0a020}
+.anchip.best{color:#2e8b57;font-weight:800}
+.anchip.inacc{color:#c98a00;font-weight:800}
+.anchip.mist{color:#d9622b;font-weight:800}
+.anchip.blun{color:#d12f2f;font-weight:800}
