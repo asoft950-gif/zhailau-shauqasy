@@ -718,7 +718,7 @@ function drawSprite(c,p,gx,gy,tm){
     c.restore();return;
   }
   c.save();c.translate(gx,gy);
-  c.rotate(flip?-p.rot:p.rot);
+  if(!(p.mood==='dead'&&skO(p.c).norot))c.rotate(flip?-p.rot:p.rot);
   const s=T/100*scO(p.c,p.t);
   c.scale((flip?-p.face:p.face)*p.sx*s,p.sy*s);
   c.rotate(p.lean);

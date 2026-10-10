@@ -410,7 +410,7 @@ for(const k in LIGHT.draw)LIGHT.draw[k]=wrap(LIGHT.draw[k]);
 
 
 /* ============ ROYAL KNIGHTS (hand-painted raster sprites: 4 walk + 4 attack frames per side) ============ */
-const RK_META={Kr:[156,121,58.8,121.8],Ku:[150,121,55.0,121.8],Kd:[122,121,58.0,121.8],Qr:[152,129,68.9,128.9],Qu:[141,127,59.6,126.8],Qd:[126,128,57.1,127.7],Br:[158,123,58.4,123.5],Bu:[102,131,51.2,131.0],Bd:[109,122,52.5,121.8],Nr:[167,137,63.0,137.8],Nu:[109,140,39.9,140.3],Nd:[104,137,46.6,137.3],Rr:[151,120,65.5,121.0],Ru:[121,121,54.2,121.4],Rd:[129,124,62.2,125.2],Pr:[163,126,58.0,127.3],Pu:[129,126,44.5,126.8],Pd:[121,128,54.2,127.7]};
+const RK_META={Kr:[156,121,58.8,121.8],Ku:[154,121,58.4,121.8],Kd:[125,121,60.5,121.8],Qr:[152,129,68.9,128.9],Qu:[143,127,61.3,127.3],Qd:[132,128,63.4,127.7],Br:[161,123,60.9,123.5],Bu:[104,131,52.5,131.0],Bd:[109,122,52.5,121.8],Nr:[173,137,69.3,137.8],Nu:[139,140,69.3,140.3],Nd:[135,137,66.8,137.3],Rr:[151,120,65.5,121.0],Ru:[124,121,56.7,121.4],Rd:[129,124,62.2,125.2],Pr:[168,126,62.6,127.3],Pu:[139,126,55.4,126.8],Pd:[131,128,63.8,127.7]};
 const RK_U=160/(534*0.42); /* local units per atlas pixel (frame = 1.6 tiles) */
 const RK_IMG={};
 const RK_DIR={r:'right',u:'up',d:'down'};
@@ -433,11 +433,11 @@ function rkFrame(o){
 const rkDraw=t=>(c,P,o)=>{
   const dr=o.dir||'r',e=rkImg(t,dr),m=RK_META[t+dr],[mw,mh,max,may]=m;
   if(!e.ok){c.save();c.globalAlpha*=.35;c.fillStyle=P.main;c.beginPath();c.ellipse(0,-30,16,28,0,0,TAU);c.fill();c.restore();return}
-  const fr=rkFrame(o),idl=fr===8,col=idl?(P.team==='b'?1:0):fr%4,row=idl?4:(P.team==='b'?2:0)+(fr>=4?1:0);
+  const dd=o.mood==='dead',fr=dd?9:rkFrame(o),idl=fr>=8,col=dd?(P.team==='b'?3:2):idl?(P.team==='b'?1:0):fr%4,row=idl?4:(P.team==='b'?2:0)+(fr>=4?1:0);
   const bob=o.moving?-Math.abs(Math.sin((o.ph||0)*1.6))*1.5:Math.sin(o.t*2.2+o.id)*-.6;
   const dead=o.mood==='dead';
   c.save();
-  if(dead)c.translate(0,5);
+  
   c.drawImage(e.img,col*mw,row*mh,mw,mh,-max*RK_U,-may*RK_U+2+bob,mw*RK_U,mh*RK_U);
   c.restore();
 };
@@ -445,7 +445,7 @@ const RKP={
   w:{main:'#C9D3E3',light:'#F4F7FC',dark:'#6C7A93',line:'#1F2A44',accent:'#3A62C8',team:'w'},
   b:{main:'#8A2B33',light:'#C9565E',dark:'#3A1218',line:'#1E0A0D',accent:'#D1453B',team:'b'}
 };
-const KNIGHTS={dirs:true,pending:t=>!rkImg(t,'d').ok,name:'Корольдік гвардия',desc:'Күміс және обсидиан рыцарьлары',pal:RKP,sc:{P:1,N:1,B:1,R:1,Q:1,K:1},
+const KNIGHTS={dirs:true,norot:true,pending:t=>!rkImg(t,'d').ok,name:'Корольдік гвардия',desc:'Күміс және обсидиан рыцарьлары',pal:RKP,sc:{P:1,N:1,B:1,R:1,Q:1,K:1},
   names:{P:'Жаяу рыцарь',N:'Салт атты',B:'Сиқыршы',R:'Мұнара сақшысы',Q:'Патшайым',K:'Патша'},
   draw:{P:rkDraw('P'),N:rkDraw('N'),B:rkDraw('B'),R:rkDraw('R'),Q:rkDraw('Q'),K:rkDraw('K')}};
 
