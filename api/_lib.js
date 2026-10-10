@@ -78,7 +78,7 @@ export const ACH = {
   hare_kill:   { name: 'Қоян секірісі', desc: 'Қоянмен жауды қағып алу', icon: '🐇' },
   horse_kill:  { name: 'Тұяқ соққысы', desc: 'Жылқымен жауды қағып алу', icon: '🐎' },
   camel_kill:  { name: 'Түйе екпіні', desc: 'Түйемен жауды қағып алу', icon: '🐫' },
-  snake_kill:  { name: 'Улы шағу', desc: 'Жыланмен жауды қағып алу', icon: '🐍' },
+  snake_kill:  { name: 'Піл соққысы', desc: 'Пілмен жауды қағып алу', icon: '🐘' },
   eagle_kill:  { name: 'Бүркіттің қармауы', desc: 'Бүркітпен жауды қағып алу', icon: '🦅' },
   king_kill:   { name: 'Батыр қылышы', desc: 'Батырмен жауды қағып алу', icon: '🗡️' },
   promo:       { name: 'Қоян — Бүркіт', desc: 'Қоянды бүркітке айналдыру', icon: '✨' },

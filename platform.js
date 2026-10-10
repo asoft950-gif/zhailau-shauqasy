@@ -3,7 +3,7 @@
 const $=s=>document.querySelector(s);
 const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e};
 const AV=['P','N','B','R','Q','K'];
-const AVN={P:'Қоян',N:'Жылқы',B:'Жылан',R:'Түйе',Q:'Бүркіт',K:'Батыр'};
+const AVN={P:'Қоян',N:'Жылқы',B:'Піл',R:'Түйе',Q:'Бүркіт',K:'Батыр'};
 let me=null,data=null,tab='profile',cupP='week',fr=null,beat=0;const seenInv=new Set();
 
 async function api(path,opt){

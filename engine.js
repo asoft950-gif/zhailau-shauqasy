@@ -3,12 +3,13 @@ const N_D=[[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
 const K_D=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const B_D=[[1,1],[1,-1],[-1,1],[-1,-1]];
 const R_D=[[1,0],[-1,0],[0,1],[0,-1]];
+const PROMO=['Q','R','B','N'];
 const VAL={P:100,N:320,B:330,R:500,Q:900,K:0};
 function inb(r,c){return r>=0&&r<8&&c>=0&&c<8}
 function opp(c){return c==='w'?'b':'w'}
 function pseudo(b,i,out){
   const p=b[i],r=i>>3,c=i&7,col=p.c;
-  const add=(to,promo)=>out.push({f:i,t:to,promo:!!promo});
+  const add=(to,promo)=>{if(promo===true){for(const pc of PROMO)out.push({f:i,t:to,promo:pc})}else out.push({f:i,t:to,promo:false})};
   if(p.t==='P'){
     const d=col==='w'?-1:1,st=col==='w'?6:1,last=col==='w'?0:7,r1=r+d;
     if(inb(r1,c)&&!b[r1*8+c]){
@@ -56,7 +57,7 @@ function moveInfo(b,m){
 function applyMove(b,m){
   const n=b.slice(),p=n[m.f],i=moveInfo(b,m);
   n[m.f]=null;
-  n[m.t]=m.promo?{t:'Q',c:p.c,id:p.id}:p;
+  n[m.t]=m.promo?{t:typeof m.promo==='string'?m.promo:'Q',c:p.c,id:p.id}:p;
   if(i.rf>=0){n[i.rt]=n[i.rf];n[i.rf]=null}
   if(i.ep>=0)n[i.ep]=null;
   n[64]=i.cr;n[65]=i.eps;
@@ -140,7 +141,7 @@ function evalB(b){
 function orderMoves(b,ms){
   const sc=m=>{
     const t=b[m.t],a=b[m.f];
-    return (t?10*VAL[t.t]-VAL[a.t]:0)+(m.promo?800:0);
+    return (t?10*VAL[t.t]-VAL[a.t]:0)+(m.promo==='Q'?800:m.promo?200:0);
   };
   ms.sort((x,y)=>sc(y)-sc(x));
 }
@@ -215,4 +216,4 @@ export function pickMove(b, col, level, noise = 0) {
   }
   return bestMove(b, col, lv === 2 ? 2 : 3);
 }
-export { N_D, K_D, B_D, R_D, VAL, inb, opp, pseudo, applyMove, moveInfo, attacked, kingSq, inChk, legal, evalB, orderMoves, qs, nega, bestMove };
+export { PROMO, N_D, K_D, B_D, R_D, VAL, inb, opp, pseudo, applyMove, moveInfo, attacked, kingSq, inChk, legal, evalB, orderMoves, qs, nega, bestMove };

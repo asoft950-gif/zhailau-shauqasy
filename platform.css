@@ -183,3 +183,11 @@
 .atop .fav{width:44px;height:44px;border-radius:12px;flex:none;background:radial-gradient(circle at 50% 85%,#9ACB60,#6A9C3C);border:2px solid var(--fg)}
 .atop .ai{display:grid;gap:1px;overflow-wrap:anywhere}.atop .ai span{font-size:.8rem;color:var(--muted)}
 .atop .cemb{font-size:1.6rem}
+
+.promo{position:absolute;inset:0;z-index:6;background:rgba(10,24,8,.62);backdrop-filter:blur(3px);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px}
+.promo[hidden]{display:none}
+.promo p{margin:0;color:#fff;font-family:var(--font-display);font-weight:800;font-size:1.15rem;text-shadow:0 2px 6px rgba(0,0,0,.5)}
+.prow2{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.pbtn{background:var(--bg);border:2px solid var(--fg);border-radius:16px;padding:8px 8px 6px;display:grid;justify-items:center;gap:2px;cursor:pointer;color:var(--fg);font:inherit;font-weight:800;font-size:.8rem;min-width:76px}
+.pbtn canvas{width:64px;height:64px}
+.pbtn:hover,.pbtn:focus-visible{background:var(--gold,#F2C94C)}

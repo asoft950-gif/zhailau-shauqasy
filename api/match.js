@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 import { sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
 import { startBoard, applyMove, gameStatus, pickMove } from '../engine.js';
 
-const enc = (m) => m.f | (m.t << 6) | (m.promo ? 1 << 12 : 0);
-const dec = (c) => ({ f: c & 63, t: (c >> 6) & 63, promo: !!(c >> 12) });
+const PC = 'QRBN';
+const enc = (m) => m.f | (m.t << 6) | (m.promo ? (PC.indexOf(m.promo) + 1 || 1) << 12 : 0);
+const dec = (c) => ({ f: c & 63, t: (c >> 6) & 63, promo: (c >> 12) ? PC[(c >> 12) - 1] || 'Q' : false });
 const turnOf = (moves) => (moves.length % 2 ? 'b' : 'w');
 const IDLE_MS = 120000;
 const TCS = [0, 180, 300, 600];
@@ -235,7 +236,8 @@ export default async function handler(req, res) {
       const { b: board } = replay(m.moves);
       const st = gameStatus(board, seat);
       const f = Math.floor(Number(b.f)), t = Math.floor(Number(b.t));
-      const mv = st.moves.find(x => x.f === f && x.t === t);
+      const wantP = PC.includes(String(b.promo || '')) && b.promo ? b.promo : 'Q';
+      const mv = st.moves.find(x => x.f === f && x.t === t && (!x.promo || x.promo === wantP));
       if (!mv) return send(res, 400, { error: 'Мұндай жүріс жоқ', match: await view(m, uid) });
       let moves = [...m.moves, enc(mv)];
       let nb = applyMove(board, mv);
