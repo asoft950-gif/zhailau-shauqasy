@@ -1,4 +1,39 @@
-import { sql, send, sessionUid, needJson, limited } from './_lib.js';
+import { sql, send, sessionUid, needJson, limited, giveChest } from './_lib.js';
+
+/* weekly clan war (Mon..Sun, UTC+5): score = members' PvP wins (max 20 per member) */
+const H5 = 5 * 3600e3, WAR_CAP = 20, WAR_PRIZE = [300, 200, 100];
+function warWeek(offset = 0) {
+  const n = Math.floor((Date.now() + H5) / 86400000);
+  const wi = Math.floor((n + 3) / 7) + offset, s = wi * 7 - 3;
+  return { key: 'w' + wi, start: new Date(s * 86400000 - H5), end: new Date((s + 7) * 86400000 - H5) };
+}
+async function warBoard(w, limit) {
+  return sql.query(
+    `SELECT c.id, c.name, c.tag, c.emblem, sum(LEAST(x.n, $3))::int AS score, count(*)::int AS fighters
+     FROM clan_members m JOIN clans c ON c.id=m.clan_id JOIN users u ON u.id=m.user_id AND NOT u.banned
+     JOIN (SELECT user_id, count(*)::int AS n FROM games WHERE mode='pvp' AND result='win' AND created_at >= $1 AND created_at < $2 GROUP BY user_id) x ON x.user_id=m.user_id
+     WHERE m.joined_at < $2
+     GROUP BY c.id ORDER BY score DESC, c.id ASC LIMIT $4`, [w.start.toISOString(), w.end.toISOString(), WAR_CAP, limit]);
+}
+async function warInfo(mem, uid) {
+  const cur = warWeek(0), prev = warWeek(-1);
+  const board = await warBoard(cur, 50);
+  const mine = mem ? board.findIndex(r => r.id === mem.clan_id) : -1;
+  const pb = await warBoard(prev, 3);
+  const place = mem ? pb.findIndex(r => r.id === mem.clan_id) : -1;
+  let claim = null;
+  if (place >= 0) {
+    const mw = (await sql.query("SELECT count(*)::int AS n FROM games WHERE user_id=$1 AND mode='pvp' AND result='win' AND created_at >= $2 AND created_at < $3", [uid, prev.start.toISOString(), prev.end.toISOString()]))[0].n;
+    const done = (await sql.query("SELECT 1 FROM claims WHERE user_id=$1 AND day=$2 AND key='war'", [uid, prev.key])).length > 0;
+    claim = { place: place + 1, reward: WAR_PRIZE[place], chest: place === 0, eligible: mw > 0, done };
+  }
+  return {
+    endsAt: cur.end.toISOString(), cap: WAR_CAP, prize: WAR_PRIZE,
+    top: board.slice(0, 10).map((r, i) => ({ place: i + 1, id: r.id, name: r.name, tag: r.tag, emblem: r.emblem, score: r.score })),
+    mine: mem ? { rank: mine >= 0 ? mine + 1 : null, score: mine >= 0 ? board[mine].score : 0 } : null,
+    prev: pb.map((r, i) => ({ place: i + 1, name: r.name, tag: r.tag, emblem: r.emblem, score: r.score })), claim,
+  };
+}
 
 const COST = 100, MAX = 20, ONLINE_MS = 75000;
 const EMB = ['🛡️', '⚔️', '🦅', '🐺', '🐎', '🏹', '👑', '🔥', '🌙', '🦁', '🐉', '⭐'];
@@ -70,6 +105,16 @@ export default async function handler(req, res) {
       }
       if (!mem) return send(res, 400, { error: 'Сен кланда жоқсың' });
       const cid = mem.clan_id;
+      if (a === 'warclaim') {
+        const wi = await warInfo(mem, uid);
+        const c = wi.claim;
+        if (!c || !c.eligible || c.done) return send(res, 400, { error: 'Алу мүмкін емес' });
+        const r = await sql.query("INSERT INTO claims (user_id,day,key) VALUES ($1,$2,'war') ON CONFLICT DO NOTHING RETURNING key", [uid, warWeek(-1).key]);
+        if (!r.length) return send(res, 400, { error: 'Алынған' });
+        await sql.query('UPDATE users SET coins=coins+$1 WHERE id=$2', [c.reward, uid]);
+        if (c.chest) await giveChest(uid);
+        return send(res, 200, { ok: true, reward: c.reward, chest: c.chest, war: await warInfo(mem, uid) });
+      }
       if (a === 'leave') {
         await sql.query('DELETE FROM clan_members WHERE user_id=$1', [uid]);
         if (mem.role === 'leader') {
@@ -110,7 +155,7 @@ export default async function handler(req, res) {
       `SELECT c.id, c.name, c.tag, c.emblem, c.descr, count(*)::int AS n, COALESCE(sum(u.rating),0)::int AS power
        FROM clans c JOIN clan_members m ON m.clan_id=c.id JOIN users u ON u.id=m.user_id AND NOT u.banned
        GROUP BY c.id ORDER BY power DESC, c.id LIMIT 20`);
-    return send(res, 200, { ok: true, cost: COST, emblems: EMB, coins: me.coins, mine: mem ? await detail(mem.clan_id, uid) : null,
+    return send(res, 200, { ok: true, cost: COST, emblems: EMB, coins: me.coins, war: await warInfo(mem, uid), mine: mem ? await detail(mem.clan_id, uid) : null,
       top: top.map(c => ({ id: c.id, name: c.name, tag: c.tag, emblem: c.emblem, descr: c.descr, n: c.n, max: MAX, power: c.power })) });
   } catch (e) { console.error(e); send(res, 500, { error: 'Сервер қатесі' }); }
 }

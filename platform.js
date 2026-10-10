@@ -77,6 +77,7 @@ async function refresh(){
   const r=await api('me');
   me=r.user||null;data=r.user?r:null;
   renderBtn();showNotice(r.notice);
+  if(r.user&&r.streak&&r.streak.canClaim&&!window.__stkSeen){window.__stkSeen=1;setTimeout(()=>toast('🔥','Күнделікті сыйлық дайын!','Тапсырма табынан ал',()=>profileView('daily'),5000),1200)}
   return r;
 }
 
@@ -331,6 +332,26 @@ async function renderFriends(b){
     for(const u of r.outgoing){const li=mk(u,'жауап күтілуде');const c=el('button','btn ghost sm','✕');c.setAttribute('aria-label','Болдырмау');c.onclick=()=>act('cancel',u.id);li.append(c);b.append(li)}
   }
 }
+function warBlock(b,r,again){
+  const w=r.war;if(!w)return;
+  const box=el('div','warbox');
+  box.append(el('h2','','⚔ Апталық клан соғысы'));
+  box.append(el('p','xpt','Аптаның соңына: '+left(w.endsAt)+'. Ұпай = клан мүшелерінің адамдарға қарсы жеңістері (әр мүшеден ең көбі '+w.cap+'). Үздік 3 клан: 🪙'+w.prize.join(' / 🪙')+' (1-орын + 🎁).'));
+  if(w.mine)box.append(el('p','warme',w.mine.rank?'Сенің клан: #'+w.mine.rank+' · '+w.mine.score+' ұпай':'Сенің клан әзірше ұпай жинаған жоқ — адаммен ойнап жең!'));
+  if(w.claim){
+    const c=w.claim;
+    const bt=el('button','btn',c.done?'Сыйлық алынды ✓':!c.eligible?'Өткен аптада жеңіс жоқ':'🏆 Өткен апта #'+c.place+': 🪙'+c.reward+(c.chest?' + 🎁':'')+' алу');
+    bt.disabled=c.done||!c.eligible;
+    bt.onclick=async()=>{bt.disabled=true;const x=await api('clans',{method:'POST',body:{action:'warclaim'}});if(x.ok){toast('🏆','+'+x.reward+' 🪙'+(x.chest?' + 🎁':''));await refresh();again()}else{toast('⚠️',x.error||'Қате');bt.disabled=false}};
+    box.append(bt);
+  }
+  if(!w.top.length)box.append(el('p','xpt','Бұл аптада әзірше ұпай жоқ.'));
+  w.top.forEach(k=>{
+    const li=el('div','fitem'+(r.mine&&r.mine.id===k.id?' me':''));li.append(el('span','cemb',k.emblem));
+    const x=el('div','fn');x.append(el('b','','#'+k.place+' ['+k.tag+'] '+k.name),el('span','',k.score+' ұпай'));li.append(x);box.append(li);
+  });
+  b.append(box);
+}
 async function renderClan(b){
   const r=await api('clans');
   if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
@@ -348,6 +369,7 @@ async function renderClan(b){
     const mkb=el('button','btn','Клан ашу · 🪙 '+r.cost);mkb.disabled=r.coins<r.cost;
     mkb.onclick=()=>{mkb.disabled=true;call({action:'create',name:nm.value,tag:tg.value,emblem:emb,descr:ds.value},'Клан ашылды!').then(x=>{if(!x.ok)mkb.disabled=false})};
     f.append(nm,tg,ds,eb,mkb);b.append(f);
+    warBlock(b,r,again);
     b.append(el('h2','','Үздік кландар'));
     if(!r.top.length)b.append(el('p','xpt','Әзірше клан жоқ. Бірінші боласың ба?'));
     r.top.forEach((k,i)=>{
@@ -361,6 +383,7 @@ async function renderClan(b){
   const hd=el('div','chead');hd.append(el('span','cemb big',c.emblem));
   const t=el('div','fn');t.append(el('b','','['+c.tag+'] '+c.name),el('span','',c.members.length+'/'+c.max+' ойыншы · күш '+c.power));hd.append(t);b.append(hd);
   if(c.descr)b.append(el('p','xpt',c.descr));
+  warBlock(b,r,again);
   b.append(el('h2','','Мүшелер'));
   for(const m of c.members){
     const li=el('div','fitem');li.append(avatarCanvas(m.avatar,'fav'));
@@ -383,9 +406,51 @@ async function renderClan(b){
 }
 function left(iso){const ms=new Date(iso)-Date.now();const h=Math.max(0,Math.floor(ms/3600e3)),m=Math.max(0,Math.floor(ms%3600e3/60e3));return h+' сағ '+m+' мин'}
 async function patchMe(body){const r=await api('me',{method:'PATCH',body});return r}
+function renderStreak(b){
+  const st=data.streak;if(!st)return;
+  const box=el('div','streak');
+  box.append(el('b','','🔥 Күнделікті кіру · серия: '+st.count+' күн'));
+  const row=el('div','srow');
+  const cur=st.canClaim?st.next:((st.count-1)%7)+1;
+  for(let i=1;i<=7;i++){
+    const done=st.canClaim?i<st.next:i<=cur;
+    const c=el('div','sday'+(done?' got':'')+(st.canClaim&&i===st.next?' now':''));
+    c.append(el('small','','Күн '+i),el('span','',i===7?'🎁':'🪙'+st.rewards[i-1]));
+    row.append(c);
+  }
+  box.append(row);
+  const bt=el('button','btn',st.canClaim?'Бүгінгі сыйлықты алу':'Бүгін алынды ✓');bt.disabled=!st.canClaim;
+  bt.onclick=async()=>{bt.disabled=true;const r=await patchMe({checkin:true});if(r.error){toast('⚠️',r.error);return}const c=r.checkin;toast('🔥','Серия '+c.streak+' күн','+'+c.coins+' 🪙'+(c.chest?' + 🎁 сандық':''));await profileView('daily')};
+  box.append(bt,el('p','xpt','Күн жіберсең серия 1-ден басталады. 7-ші күні сандық!'));
+  b.append(box);
+}
+function renderChests(b){
+  const n=data.streak?data.streak.chests:0;
+  const box=el('div','chestbox');
+  box.append(el('span','cicon','🎁'),el('b','','Сандықтар: '+n));
+  const bt=el('button','btn',n?'Ашу':'Бос');bt.disabled=!n;
+  bt.onclick=()=>openChestAnim();
+  box.append(bt,el('small','','Адамды жеңсең (күніне 5-ке дейін), науқан кезеңін алғаш өтсең, 7 күн серия жасасаң беріледі'));
+  b.append(box);
+}
+async function openChestAnim(){
+  const ov=el('div','chestov');const card=el('div','chestcard');const ic=el('div','cbig shake','🎁');const tx=el('p','ctx','Ашылуда…');
+  card.append(ic,tx);ov.append(card);document.body.append(ov);
+  const [r]=await Promise.all([patchMe({open:true}),new Promise(z=>setTimeout(z,1300))]);
+  if(r.error||!r.opened){ov.remove();toast('⚠️',r.error||'Қате');return}
+  const o=r.opened;let txt='';
+  ic.classList.remove('shake');ic.classList.add('pop');
+  if(o.type==='coins'){ic.textContent='🪙';txt='+'+o.coins+' тиын'}
+  else if(o.type==='bskin'){ic.textContent='🎨';txt='Жаңа тақта: '+((SKN[o.key]||[])[1]||o.key)}
+  else {ic.textContent='✨';txt='Жаңа скин: '+((PSN[o.key]||[])[1]||o.key)}
+  if(o.rare>=2)card.classList.add('epic');else if(o.rare===1)card.classList.add('rare');
+  tx.textContent=txt;window.__snd&&window.__snd('chime');
+  const ok=el('button','btn','Керемет!');ok.onclick=async()=>{ov.remove();await refresh();if($('#dlg')&&tab==='daily')profileView('daily')};card.append(ok);
+}
 function renderDaily(b){
   const dl=data.daily;
   b.append(el('p','coins','🪙 '+me.coins+' тиын'));
+  renderStreak(b);renderChests(b);
   b.append(el('p','xpt','Бүгінгі тапсырмалар · жаңарады: '+left(dl.nextAt)));
   const ul=el('div','qlist');
   for(const q of dl.quests){
@@ -628,6 +693,7 @@ function showAward(r,result){
     const a=(data&&data.catalog&&data.catalog[k])||null;
     setTimeout(()=>{ if(a){toast(a.icon,'Жетістік: '+a.name,a.desc,null,5500);window.__snd&&window.__snd('chime')} },delay);delay+=1100;
   }
+  if(r.chest||(r.camp&&r.camp.chest))setTimeout(()=>toast('🎁','Сандық алдың!','Тапсырма табында аш',null,4500),delay);
   refresh();
 }
 

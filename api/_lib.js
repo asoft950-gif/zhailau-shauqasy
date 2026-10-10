@@ -140,7 +140,8 @@ export async function applyResult(uid, g, oppRating) {
   ];
   for (const k of newKeys) q.push(sql.query('INSERT INTO achievements (user_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [uid, k]));
   await Promise.all(q);
-  return { dRating, dXp, dCoins: dCoins + newKeys.length * 20, rating: nu.rating, xp: nu.xp, level: levelOf(nu.xp), levelUp: levelOf(nu.xp) > levelOf(u.xp), newAchievements: newKeys };
+  const chest = g.result === 'win' && g.mode === 'pvp' ? await winChest(uid) : false;
+  return { chest, dRating, dXp, dCoins: dCoins + newKeys.length * 20, rating: nu.rating, xp: nu.xp, level: levelOf(nu.xp), levelUp: levelOf(nu.xp) > levelOf(u.xp), newAchievements: newKeys };
 }
 
 /* ---------- daily quests + shop ---------- */
@@ -185,6 +186,68 @@ export async function claimQuest(uid, key) {
   return q.reward;
 }
 
+/* ---------- login streak + chests ---------- */
+export const STREAK = [20, 20, 30, 30, 40, 50, 100]; // day 7 also gives a chest
+const dayKeyN = n => new Date(n * 86400000).toISOString().slice(0, 10);
+export async function streakInfo(uid) {
+  const d = dayInfo();
+  const u = (await sql.query('SELECT login_streak, streak_day, chests FROM users WHERE id=$1', [uid]))[0] || {};
+  const last = u.streak_day || '';
+  let count = Number(u.login_streak || 0), canClaim = true;
+  if (last === d.key) canClaim = false;
+  else if (last !== dayKeyN(d.n - 1)) count = 0;
+  const next = canClaim ? (count % 7) + 1 : 0;
+  return { count, canClaim, next, rewards: STREAK, chests: Number(u.chests || 0) };
+}
+export async function checkin(uid) {
+  const d = dayInfo();
+  const u = (await sql.query('SELECT login_streak, streak_day FROM users WHERE id=$1', [uid]))[0];
+  if (!u || u.streak_day === d.key) return null;
+  const cont = u.streak_day === dayKeyN(d.n - 1);
+  const ns = cont ? Number(u.login_streak || 0) + 1 : 1;
+  const day = ((ns - 1) % 7) + 1;
+  const coins = STREAK[day - 1], chest = day === 7 ? 1 : 0;
+  const r = await sql.query("UPDATE users SET login_streak=$2, streak_day=$3, coins=coins+$4, chests=chests+$5 WHERE id=$1 AND COALESCE(streak_day,'')<>$3 RETURNING id", [uid, ns, d.key, coins, chest]);
+  if (!r.length) return null;
+  return { streak: ns, day, coins, chest };
+}
+export async function giveChest(uid, n = 1) { await sql.query('UPDATE users SET chests=chests+$2 WHERE id=$1', [uid, n]); }
+/* PvP win -> chest (max 5 per day) */
+export async function winChest(uid) {
+  const d = dayInfo();
+  for (let i = 1; i <= 5; i++) {
+    const r = await sql.query('INSERT INTO claims (user_id,day,key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING key', [uid, d.key, 'chest' + i]);
+    if (r.length) { await giveChest(uid); return true; }
+  }
+  return false;
+}
+export async function openChest(uid) {
+  const r = await sql.query('UPDATE users SET chests=chests-1 WHERE id=$1 AND chests>0 RETURNING skins', [uid]);
+  if (!r.length) return null;
+  const sk = r[0].skins || {};
+  const ownB = new Set(sk.own || []), ownP = new Set(sk.pown || []);
+  const roll = crypto.randomInt(100);
+  let out = null;
+  if (roll >= 98) out = { type: 'coins', coins: 500, rare: 3 };
+  else if (roll >= 90) {
+    const free = Object.keys(PSKINS).filter(k => PSKINS[k].price > 0 && !ownP.has(k));
+    if (free.length) {
+      const k = free[crypto.randomInt(free.length)];
+      await sql.query("UPDATE users SET skins=jsonb_set(skins,'{pown}', COALESCE(skins->'pown','[]'::jsonb) || to_jsonb($2::text)) WHERE id=$1", [uid, k]);
+      out = { type: 'pskin', key: k, rare: 2 };
+    } else out = { type: 'coins', coins: 150, rare: 2 };
+  } else if (roll >= 70) {
+    const free = Object.keys(SHOP).filter(k => SHOP[k] > 0 && !ownB.has(k));
+    if (free.length) {
+      const k = free[crypto.randomInt(free.length)];
+      await sql.query("UPDATE users SET skins=jsonb_set(skins,'{own}', (skins->'own') || to_jsonb($2::text)) WHERE id=$1", [uid, k]);
+      out = { type: 'bskin', key: k, rare: 1 };
+    } else out = { type: 'coins', coins: 100, rare: 1 };
+  } else out = { type: 'coins', coins: 30 + crypto.randomInt(91), rare: 0 };
+  if (out.type === 'coins') await sql.query('UPDATE users SET coins=coins+$2 WHERE id=$1', [uid, out.coins]);
+  return out;
+}
+
 /* ---------- piece skins ---------- */
 export const PSKINS = {
   classic: { price: 0 }, beast: { price: 0 },
@@ -213,7 +276,7 @@ export const CAMP = [
 export async function campaignWin(uid, stage) {
   const c = CAMP[stage - 1];
   if (!c) return null;
-  const r = await sql.query('UPDATE users SET camp=$2, coins=coins+$3 WHERE id=$1 AND camp<$2 RETURNING camp', [uid, stage, c.reward]);
+  const r = await sql.query('UPDATE users SET camp=$2, coins=coins+$3, chests=chests+1 WHERE id=$1 AND camp<$2 RETURNING camp', [uid, stage, c.reward]);
   if (!r.length) return { stage, first: false, coins: 0, ach: [] };
   const ach = [];
   for (const [k, s] of [['camp_3', 3], ['camp_5', 5], ['camp_7', 7], ['camp_10', 10]]) {
@@ -222,5 +285,5 @@ export async function campaignWin(uid, stage) {
       if (x.length) ach.push(k);
     }
   }
-  return { stage, first: true, coins: c.reward, ach };
+  return { stage, first: true, coins: c.reward, ach, chest: true };
 }

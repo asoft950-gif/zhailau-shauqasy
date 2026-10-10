@@ -46,6 +46,13 @@ function sideStats(log, side) {
   const lost = log.filter(x => x.side !== side && x.cap).length;
   return { moves: own.length, captures: caps, by_piece: by, promos, lost };
 }
+const sideOf = (m, uid) => (uid && (m.white_id === uid || m.white2_id === uid) ? 'w' : uid && (m.black_id === uid || m.black2_id === uid) ? 'b' : null);
+/* team games (2v2): the two teammates alternate on their side's moves */
+const moverId = (m) => {
+  if (!m.team) return null;
+  const ply = m.moves.length, white = ply % 2 === 0, second = Math.floor(ply / 2) % 2 === 1;
+  return white ? (second ? m.white2_id : m.white_id) : (second ? m.black2_id : m.black_id);
+};
 const newCode = () => crypto.randomBytes(4).toString('hex').slice(0, 6).toUpperCase();
 
 async function who(id) {
@@ -56,12 +63,13 @@ async function who(id) {
 const cseqOf = (m) => { const c = m.chat || []; return c.length ? c[c.length - 1].n : 0; };
 const watchersOf = async (id) => (await sql.query("SELECT count(*)::int AS n FROM watchers WHERE match_id=$1 AND seen > now() - interval '15 seconds'", [id]))[0].n;
 async function view(m, uid) {
-  const [w, b] = await Promise.all([who(m.white_id), who(m.black_id)]);
-  const you = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
+  const [w, b, w2, b2] = await Promise.all([who(m.white_id), who(m.black_id), m.team ? who(m.white2_id) : null, m.team ? who(m.black2_id) : null]);
+  const you = sideOf(m, uid);
   const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating, skin: (u.skins && u.skins.piece) || 'beast' };
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
+    team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
@@ -75,7 +83,7 @@ async function finish(m, winner, reason) {
   if (!r.length) return null;
   const row = r[0];
   const { log } = replay(row.moves);
-  const rated = row.moves.length >= 8 || (row.mode === 'pvp' && ['timeout', 'time'].includes(reason) && row.moves.length >= 2);
+  const rated = !row.team && (row.moves.length >= 8 || (row.mode === 'pvp' && ['timeout', 'time'].includes(reason) && row.moves.length >= 2));
   const awards = {};
   if (rated) {
     const res = (side) => (winner === null ? 'draw' : winner === side ? 'win' : 'loss');
@@ -106,7 +114,10 @@ async function abandonOwnAi(uid) {
   for (const m of r) await finish(m, 'b', 'abandoned');
 }
 async function cancelOwnOpen(uid) {
-  await sql.query("DELETE FROM matches WHERE status='open' AND (white_id=$1 OR black_id=$1)", [uid]);
+  await sql.query("DELETE FROM matches WHERE status='open' AND (white_id=$1 OR (black_id=$1 AND NOT team))", [uid]);
+  await sql.query("UPDATE matches SET white2_id=NULL WHERE status='open' AND team AND white2_id=$1", [uid]);
+  await sql.query("UPDATE matches SET black_id=NULL WHERE status='open' AND team AND black_id=$1", [uid]);
+  await sql.query("UPDATE matches SET black2_id=NULL WHERE status='open' AND team AND black2_id=$1", [uid]);
 }
 
 export default async function handler(req, res) {
@@ -115,7 +126,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       if (req.query?.active) {
         if (!uid) return send(res, 200, { match: null });
-        const r = await sql.query("SELECT * FROM matches WHERE status IN ('active','open') AND (white_id=$1 OR black_id=$1) ORDER BY updated_at DESC LIMIT 1", [uid]);
+        const r = await sql.query("SELECT * FROM matches WHERE status IN ('active','open') AND (white_id=$1 OR black_id=$1 OR white2_id=$1 OR black2_id=$1) ORDER BY updated_at DESC LIMIT 1", [uid]);
         const am = r[0] ? await flagCheck(r[0]) : null;
         return send(res, 200, { match: am && am.status !== 'done' ? await view(am, uid) : (am ? await view(am, uid) : null) });
       }
@@ -137,7 +148,7 @@ export default async function handler(req, res) {
       let m = await load(Number(req.query?.id));
       if (!m) return send(res, 404, { error: 'Ойын табылмады' });
       m = await flagCheck(m);
-      const seat = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
+      const seat = sideOf(m, uid);
       if (seat && m.status !== 'done') sql.query(`UPDATE matches SET seen_${seat}=now() WHERE id=$1`, [m.id]).catch(() => {});
       if (!seat && m.status === 'active' && m.mode === 'pvp') {
         const k = uid ? 'u' + uid : 'i' + crypto.createHash('sha1').update(String(req.headers['x-forwarded-for'] || '') + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 12);
@@ -156,7 +167,7 @@ export default async function handler(req, res) {
       if (await limited(req, 'emote' + uid, 25, 30)) return send(res, 429, { error: 'Тым жиі' });
       const m = await load(Number(b.id)), e = Number(b.e);
       if (!m || m.status !== 'active' || m.mode !== 'pvp' || !Number.isInteger(e) || e < 0 || e > 9) return send(res, 400, { error: 'Қате' });
-      const side = m.white_id === uid ? 'w' : m.black_id === uid ? 'b' : 'v';
+      const side = sideOf(m, uid) || 'v';
       if (side === 'v' && e < 6) return send(res, 403, { error: 'Көрермен тек реакция жібере алады' });
       const uname = side === 'v' ? ((await who(uid)) || {}).username || '' : '';
       await sql.query(
@@ -209,6 +220,13 @@ export default async function handler(req, res) {
         [newCode(), asBlack ? null : uid, asBlack ? uid : null, pub, tc]);
       return send(res, 200, { match: await view(r[0], uid) });
     }
+    if (b.action === 'team') {
+      if (await limited(req, 'newteam', 20, 600)) return send(res, 429, { error: 'Тым жиі' });
+      await cancelOwnOpen(uid);
+      const tc = TCS.includes(Number(b.tc)) ? Number(b.tc) : 0;
+      const r = await sql.query("INSERT INTO matches (code,mode,white_id,is_public,status,tc,team) VALUES ($1,'pvp',$2,false,'open',$3,true) RETURNING *", [newCode(), uid, tc]);
+      return send(res, 200, { match: await view(r[0], uid) });
+    }
     if (b.action === 'invite') {
       if (await limited(req, 'invite', 30, 600)) return send(res, 429, { error: 'Тым жиі' });
       const to = Number(b.to);
@@ -224,9 +242,23 @@ export default async function handler(req, res) {
       const code = String(b.code || '').trim().toUpperCase();
       const m = (await sql.query('SELECT * FROM matches WHERE code=$1', [code]))[0];
       if (!m) return send(res, 404, { error: 'Мұндай код жоқ' });
-      if (m.white_id === uid || m.black_id === uid) return send(res, 200, { match: await view(m, uid) });
+      if (sideOf(m, uid)) return send(res, 200, { match: await view(m, uid) });
       if (m.status !== 'open') return send(res, 409, { error: 'Бұл ойын басталып кеткен' });
       await cancelOwnOpen(uid);
+      if (m.team) {
+        /* seats fill in order: teammate of the host, then the two opponents */
+        const cur = await load(m.id);
+        const seatT = ['white2_id', 'black_id', 'black2_id'].find(k => !cur[k]);
+        if (!seatT) return send(res, 409, { error: 'Бөлме толы' });
+        const u1 = await sql.query(`UPDATE matches SET ${seatT}=$1, ver=ver+1, updated_at=now() WHERE id=$2 AND status='open' AND ${seatT} IS NULL RETURNING *`, [uid, m.id]);
+        if (!u1.length) return send(res, 409, { error: 'Орын бос емес, қайта көр' });
+        const f = u1[0];
+        if (f.white_id && f.white2_id && f.black_id && f.black2_id) {
+          const a = await sql.query("UPDATE matches SET status='active', ver=ver+1, updated_at=now(), seen_w=now(), seen_b=now(), cw=tc*1000, cb=tc*1000, turn_at=now() WHERE id=$1 AND status='open' RETURNING *", [m.id]);
+          return send(res, 200, { match: await view(a[0] || f, uid) });
+        }
+        return send(res, 200, { match: await view(f, uid) });
+      }
       const seat = m.white_id ? 'black_id' : 'white_id';
       const r = await sql.query(`UPDATE matches SET ${seat}=$1, status='active', ver=ver+1, updated_at=now(), seen_w=now(), seen_b=now(), cw=tc*1000, cb=tc*1000, turn_at=now() WHERE id=$2 AND status='open' RETURNING *`, [uid, m.id]);
       if (!r.length) return send(res, 409, { error: 'Бұл ойын басталып кеткен' });
@@ -235,11 +267,11 @@ export default async function handler(req, res) {
 
     const m = await load(Number(b.id));
     if (!m) return send(res, 404, { error: 'Ойын табылмады' });
-    const seat = m.white_id === uid ? 'w' : m.black_id === uid ? 'b' : null;
+    const seat = sideOf(m, uid);
     if (!seat) return send(res, 403, { error: 'Бұл сіздің ойыныңыз емес' });
 
     if (b.action === 'cancel') {
-      if (m.status === 'open') await sql.query("DELETE FROM matches WHERE id=$1 AND status='open'", [m.id]);
+      if (m.status === 'open') await cancelOwnOpen(uid);
       return send(res, 200, { ok: true });
     }
     if (m.status !== 'active') return send(res, 200, { match: await view(m, uid) });
@@ -262,7 +294,7 @@ export default async function handler(req, res) {
         const fm = await flagCheck(m);
         if (fm.status !== 'active') return send(res, 200, { match: await view(fm, uid), awards: null });
       }
-      if (turnOf(m.moves) !== seat) return send(res, 409, { error: 'Сіздің жүрісіңіз емес', match: await view(m, uid) });
+      if (turnOf(m.moves) !== seat || (m.team && moverId(m) !== uid)) return send(res, 409, { error: m.team && turnOf(m.moves) === seat ? 'Серіктесіңнің жүрісі' : 'Сіздің жүрісіңіз емес', match: await view(m, uid) });
       const { b: board } = replay(m.moves);
       const st = gameStatus(board, seat);
       const f = Math.floor(Number(b.f)), t = Math.floor(Number(b.t));

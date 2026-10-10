@@ -1,4 +1,4 @@
-import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, SHOP, PSKINS, unlockedPieceSkins, CAMP, hashPw, checkPw, clearSession } from './_lib.js';
+import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, streakInfo, checkin, openChest, SHOP, PSKINS, unlockedPieceSkins, CAMP, hashPw, checkPw, clearSession } from './_lib.js';
 
 export const BANNERS = ['grass', 'dusk', 'night', 'snow', 'sand', 'royal', 'fire', 'sea'];
 const ONLINE_MS = 75000;
@@ -43,6 +43,16 @@ export default async function handler(req, res) {
       if (b.claim) {
         const got = await claimQuest(uid, String(b.claim));
         if (got === null) return send(res, 400, { error: 'Алу мүмкін емес' });
+      }
+      if (b.checkin) {
+        const c = await checkin(uid);
+        if (!c) return send(res, 400, { error: 'Бүгін алынған' });
+        b.__ci = c;
+      }
+      if (b.open) {
+        const o = await openChest(uid);
+        if (!o) return send(res, 400, { error: 'Сандық жоқ' });
+        b.__open = o;
       }
       if (b.buy && Object.hasOwn(SHOP, b.buy)) {
         const r = await sql.query("UPDATE users SET coins=coins-$2, skins=jsonb_set(skins,'{own}', (skins->'own') || to_jsonb($3::text)) WHERE id=$1 AND coins>=$2 AND NOT ((skins->'own') @> to_jsonb($3::text)) RETURNING id", [uid, SHOP[b.buy], b.buy]);
@@ -89,6 +99,7 @@ export default async function handler(req, res) {
         return send(res, 200, { ok: true, deleted: true });
       }
       if (b.bio !== undefined) await sql.query('UPDATE users SET bio=$1 WHERE id=$2', [String(b.bio).slice(0, 140), uid]);
+      req.__extra = { checkin: b.__ci, opened: b.__open };
     }
     /* creator: unlimited coins, every skin, every campaign stage, every achievement (for testing) */
     const cr = await sql.query("UPDATE users SET coins=GREATEST(coins,900000000), camp=GREATEST(camp,$2), skins=jsonb_set(jsonb_set(skins,'{own}',$3::jsonb),'{pown}',$4::jsonb) WHERE id=$1 AND role='creator' AND NOT banned RETURNING id", [uid, CAMP.length, JSON.stringify(Object.keys(SHOP)), JSON.stringify(Object.keys(PSKINS))]);
@@ -103,8 +114,9 @@ export default async function handler(req, res) {
     const hist = await sql.query('SELECT result, mode, side, moves, captures, lost, created_at FROM games WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [uid]);
     const clan = (await sql.query('SELECT c.id, c.name, c.tag, c.emblem FROM clan_members m JOIN clans c ON c.id=m.clan_id WHERE m.user_id=$1', [uid]))[0] || null;
     const daily = await dailyFor(uid);
+    const streak = await streakInfo(uid);
     const medals = await sql.query('SELECT period_key, place FROM season_awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30', [uid]);
     const punlocked = await unlockedPieceSkins({ id: uid, role: u.role, skins: u.skins });
-    send(res, 200, { clan, notice: await notice(), banners: BANNERS, campaign: CAMP, daily, medals, pshop: PSKINS, punlocked, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
+    send(res, 200, { ...(req.__extra || {}), streak, clan, notice: await notice(), banners: BANNERS, campaign: CAMP, daily, medals, pshop: PSKINS, punlocked, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
   } catch (e) { console.error(e); send(res, 500, { error: 'Сервер қатесі' }); }
 }

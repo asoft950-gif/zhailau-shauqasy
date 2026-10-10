@@ -1085,7 +1085,7 @@ function afterMove(silent){
     setStatus(winner?NAME[winner]+' жағы жеңді':'Тең ойын',winner||turn);
     showResult();if(winner)document.body.classList.add('finale');
   }else{
-    const own=net&&net.you?(turn===net.you?'Сенің жүрісің · '+NAME[turn]:'Қарсылас ойланып жатыр…'):NAME[turn]+' жағының жүрісі';
+    const own=net&&net.you?(net.team?(net.myTurn?'Сенің жүрісің · '+NAME[turn]:turn===net.you?'Серіктесіңнің жүрісі: '+(net.moverName||''):'Қарсылас ойланып жатыр…'):turn===net.you?'Сенің жүрісің · '+NAME[turn]:'Қарсылас ойланып жатыр…'):NAME[turn]+' жағының жүрісі';
     setStatus(checked?'Шах! '+NAME[turn]+' Батыры қауіпте':own,turn);
     if(checked&&!silent){const k=kingSq(board,turn);pop(k&7,k>>3,'ШАХ!','#FF8A7A');shake=Math.max(shake,.4);snd('check')}
   }
@@ -1286,20 +1286,20 @@ function restoreFromMoves(moves){
 function canAct(){
   if(rp)return false;
   if(mode==='puz')return !!pz&&!pz.done&&turn==='w';
-  if(net)return net.status==='active'&&turn===net.you;
+  if(net)return net.status==='active'&&turn===net.you&&(!net.team||net.myTurn);
   if(mode==='net')return false;
   return mode==='ai'?turn==='w':true;
 }
 function setFlip(v){if(flip!==v){flip=v;buildBoard()}}
 
 /* ---- players bars, buttons ---- */
-function fillBar(box,info,c){
+function fillBar(box,info,c,second){
   box.hidden=false;box.textContent='';box.dataset.side=c;
   box.classList.toggle('on',!!net&&net.status==='active'&&!over&&turn===c);
   const cv=el('canvas','pav2');box.append(cv);
   requestAnimationFrame(()=>drawIcon(cv,info.avatar||(info.bot?'K':'P'),c,0));
   const w=el('div','pn');
-  w.append(el('b','',(info.name||'?')+(info.role==='creator'?' 👑':'')));
+  w.append(el('b','',(info.name||'?')+(info.role==='creator'?' 👑':'')+(second?' & '+(second.name||'?'):'')));
   w.append(el('span','',info.bot?'компьютер':(info.rating?'рейтинг '+info.rating:'')));
   const d=el('i','pd');d.style.background=c==='w'?'#F2C94C':'#5560D6';
   box.append(w);
@@ -1324,8 +1324,8 @@ function renderBars(){
   const t=$('#pbTop'),b=$('#pbBot');
   if(!net){t.hidden=b.hidden=true;return}
   const you=net.you||'w',o=opp(you);
-  fillBar(t,o==='w'?net.white:net.black,o);
-  fillBar(b,you==='w'?net.white:net.black,you);
+  fillBar(t,o==='w'?net.white:net.black,o,net.team?(o==='w'?net.white2:net.black2):null);
+  fillBar(b,you==='w'?net.white:net.black,you,net.team?(you==='w'?net.white2:net.black2):null);
 }
 function refreshUI(){
   applyPSkins();
@@ -1346,9 +1346,10 @@ function updateClaim(){
 setInterval(updateClaim,5000);
 
 /* ---- server games ---- */
+const teamCount=n=>[n.white,n.white2,n.black,n.black2].filter(x=>x&&x.id).length;
 function adoptNet(m){
   clearTimeout(pollT);
-  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
+  net={team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
   setClk(m);
   lastChange=Date.now();
 }
@@ -1368,10 +1369,11 @@ function netApply(m){
   if(!net||m.id!==net.id)return;
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
-  net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
+  net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
   setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
+  if(net.team&&m.status==='open'&&$('#teamTxt')){const nn=teamCount(net);if(nn!==net.shown){net.shown=nn;showLobby('wait')}}
   if(was==='open'&&m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start')}
   renderBars();refreshUI();
   netPump();
@@ -1412,6 +1414,7 @@ async function pollOnce(){
   if(!n||n.mode!=='pvp')return;
   const r=await napi(null,'?id='+n.id+'&v='+n.ver+'&c='+(n.cseq||0));
   if(net!==n)return;
+  if(n.team&&n.status==='open'&&!r.match&&!r.same&&r.error){net=null;clearTimeout(pollT);PL().toast('👥','Бөлме жабылды');showLobby('menu');renderBars();refreshUI();return}
   if(r.same&&r.watchers!=null&&r.watchers!==n.watchers){n.watchers=r.watchers;renderWatchInfo()}
   if(r.match)netApply(r.match);
   if(n.status==='open'&&n.public&&Date.now()-(n.qAt||0)>6000){
@@ -1472,7 +1475,12 @@ function showLobby(kind){
     return;
   }
   if(kind==='wait'&&net){
-    card.append(el('h3','',net.code&&!net.public?'Дос күтілуде…':'Қарсылас іздеп жатырмыз…'));
+    card.append(el('h3','',net.team?'👥 Командалық ойын 2×2':net.code&&!net.public?'Дос күтілуде…':'Қарсылас іздеп жатырмыз…'));
+    if(net.team){
+      const n=teamCount(net);net.shown=n;
+      const t=el('p','',n+' / 4 ойыншы қосылды');t.id='teamTxt';card.append(t);
+      card.append(el('p','xpt','1-ші қосылған — сенің серіктесің (бір жақта), 2-3-ші — қарсыластар. Жүрістер кезекпен: сен — серігің — сен…'));
+    }
     const sp=el('div','spin');card.append(sp);
     if(net.public){const g=el('p','xpt','Рейтинг айырмасы: ±150 (уақыт өткен сайын кеңейеді)');g.id='gapTxt';card.append(g)}
     if(net.code&&net.showCode){
@@ -1498,19 +1506,20 @@ function showLobby(kind){
   card.append(tcs);
   const q=el('button','btn','⚡ Жылдам ойын');q.onclick=()=>startPvp('quick');
   const c=el('button','btn ghost','🤝 Дос шақыру');c.onclick=()=>startPvp('create');
+  const tm=el('button','btn ghost','👥 2×2 командалық');tm.onclick=()=>startPvp('team');
   const row=el('div','jrow');
   const inp=el('input');inp.placeholder='Код';inp.maxLength=8;inp.autocapitalize='characters';inp.setAttribute('aria-label','Ойын коды');
   const jb=el('button','btn ghost','Кіру');
   jb.onclick=()=>joinCode(inp.value);
   inp.onkeydown=e=>{if(e.key==='Enter')joinCode(inp.value)};
   row.append(inp,jb);
-  card.append(q,c,row);
+  card.append(q,c,tm,row);
   loadLive(card);
 }
 async function startPvp(action){
   const r=await napi({action,tc:tcSel});
   if(!r.match){PL().toast('⚠️',r.error||'Қате');return}
-  openPvp(r.match,action==='create');
+  openPvp(r.match,action==='create'||action==='team');
 }
 async function joinCode(code){
   code=String(code||'').trim();
@@ -1520,6 +1529,7 @@ async function joinCode(code){
   openPvp(r.match,false);
 }
 function openPvp(m,showCode){
+  if(m.team)showCode=true;
   setMode('net',true);
   adoptNet(m);net.public=!showCode&&m.status==='open';net.showCode=showCode;
   if(m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start');renderBars();refreshUI();}
