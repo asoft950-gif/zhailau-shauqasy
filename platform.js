@@ -62,16 +62,27 @@ function syncBeat(){
   else if(!me&&beat){clearInterval(beat);beat=0;fr=null}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)beatNow()});
+function showNotice(n){
+  const old=document.getElementById('noticeBar');
+  let seen='';try{seen=localStorage.getItem('nid')||''}catch(e){}
+  if(!n||String(n.id)===seen){if(old)old.remove();return}
+  if(old&&old.dataset.id===String(n.id))return;
+  if(old)old.remove();
+  const bar=el('div','noticebar');bar.id='noticeBar';bar.dataset.id=n.id;bar.setAttribute('role','status');
+  bar.append(el('span','','📣'),el('span','nt',n.text));
+  const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=()=>{try{localStorage.setItem('nid',String(n.id))}catch(e){}bar.remove()};bar.append(x);
+  document.body.prepend(bar);
+}
 async function refresh(){
   const r=await api('me');
   me=r.user||null;data=r.user?r:null;
-  renderBtn();
+  renderBtn();showNotice(r.notice);
   return r;
 }
 
 /* ---------- auth dialog ---------- */
 function authView(mode){
-  const d=$('#dlg');d.textContent='';
+  const d=$('#dlg');d.textContent='';d.className='dlg';
   const h=el('div','dh');h.append(el('h2','',mode==='login'?'Кіру':'Тіркелу'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
@@ -118,11 +129,11 @@ async function profileView(t){
   tab=t||tab;
   await refresh();
   if(!me){authView('login');return}
-  const d=$('#dlg');d.textContent='';
+  const d=$('#dlg');d.textContent='';d.className='dlg big';
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг'],['set','Баптау']];if(me.role==='creator'||me.role==='moderator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
@@ -137,49 +148,137 @@ async function profileView(t){
   else if(tab==='shop')renderShop(body);
   else if(tab==='cup')await renderCup(body,cupP);
   else if(tab==='top')await renderTop(body);
-  else await renderAdmin(body,'');
+  else if(tab==='set')renderSettings(body);
+  else await renderAdmin(body);
   openOv();
 }
+const BN={grass:'Жайлау',dusk:'Кеш',night:'Түн',snow:'Қар',sand:'Құм',royal:'Патша',fire:'Алау',sea:'Теңіз'};
+const ROLE={creator:'👑 Создатель',moderator:'🛡️ Модератор'};
+const ago=iso=>{const m=Math.floor((Date.now()-new Date(iso))/6e4);return m<1?'жаңа':m<60?m+' мин бұрын':m<1440?Math.floor(m/60)+' сағ бұрын':Math.floor(m/1440)+' күн бұрын'};
+function hero(u,cat,extra){
+  const h=el('div','phero b-'+(u.banner||'grass'));
+  const av=el('canvas','pav big');requestAnimationFrame(()=>icon(av,u.avatar));
+  const w=el('div','hw');
+  const nm=el('div','pname',u.name||u.username);
+  w.append(nm);
+  const tags=el('div','tags');
+  if(ROLE[u.role])tags.append(el('span','badge',ROLE[u.role]));
+  if(u.clan)tags.append(el('span','badge clanb',u.clan.emblem+' ['+u.clan.tag+'] '+u.clan.name));
+  const tt=u.title&&cat[u.title];if(tt)tags.append(el('span','badge ttl',tt.icon+' '+tt.name));
+  if(tags.children.length)w.append(tags);
+  w.append(el('p','pbio',u.bio||'—'));
+  h.append(av,w);
+  const lvl=u.level,base=Math.pow(lvl-1,2)*50,next=Math.pow(lvl,2)*50;
+  const xp=el('div','xp');const bar=el('i');bar.style.width=Math.max(2,Math.min(100,(u.xp-base)/(next-base)*100))+'%';xp.append(bar);
+  const row=el('div','hx');row.append(el('b','','Деңгей '+lvl),el('span','',u.xp+' / '+next+' XP'));
+  h.append(row,xp);
+  if(extra)h.append(extra);
+  return h;
+}
+function statsBlock(u){
+  const wr=u.games?Math.round(u.wins/u.games*100):0;
+  const g=el('div','stats s4');
+  g.append(stat(u.rating,'Рейтинг'),stat('#'+u.rank,'Орын'),stat(u.games,'Ойын'),stat(wr+'%','Жеңіс үлесі'),stat(u.wins,'Жеңіс'),stat(u.losses,'Жеңіліс'),stat(u.draws,'Тең'),stat(u.best_streak,'Үздік серия'));
+  const bar=el('div','wlbar');const tot=Math.max(1,u.wins+u.losses+u.draws);
+  for(const [k,v] of [['w',u.wins],['d',u.draws],['l',u.losses]]){const i=el('i',k);i.style.width=(v/tot*100)+'%';bar.append(i)}
+  const f=el('div');f.append(g,bar);return f;
+}
+function showcaseBlock(keys,cat){
+  const wrap=el('div','showc');
+  if(!keys.length){wrap.append(el('p','xpt','Таңдаулы жетістіктер жоқ'));return wrap}
+  for(const k of keys){const a=cat[k];if(!a)continue;const c=el('div','ach got');c.append(el('div','ic',a.icon),el('b','',a.name),el('span','',a.desc));wrap.append(c)}
+  return wrap;
+}
+function medalsLine(m){const t=(m[1]||0)+(m[2]||0)+(m[3]||0);return t?el('p','xpt','🏅 Медальдар: 🥇'+m[1]+' 🥈'+m[2]+' 🥉'+m[3]):null}
+function histList(list,empty){
+  const ul=el('ul','hist');
+  if(!list.length){const li=el('li');li.append(el('span','',empty));ul.append(li)}
+  for(const g of list){
+    const li=el('li');const rl={win:'Жеңіс',loss:'Жеңіліс',draw:'Тең'}[g.result];
+    li.append(el('span',g.result,rl+' · '+(g.mode==='pvp'?'онлайн':'бот')),el('span','',g.moves+' жүріс'+(g.captures!=null?' · '+g.captures+' жау':'')+' · '+new Date(g.created_at).toLocaleDateString('kk-KZ')));ul.append(li);
+  }
+  return ul;
+}
 function renderProfile(b){
-  const u=me;
-  const ph=el('div','phead');
-  const av=el('canvas','pav');requestAnimationFrame(()=>icon(av,u.avatar));
-  const w=el('div');w.append(el('div','pname',u.username));
-  if(u.role==='creator'){const bd=el('span','badge','👑 Создатель');w.append(bd)}
-  w.append(el('p','pbio',u.bio||'Өзің туралы бірдеңе жаз…'));
-  ph.append(av,w);b.append(ph);
-  const base=Math.pow(u.level-1,2)*50,span=u.xpNext-base;
-  const xp=el('div','xp');const bar=el('i');bar.style.width=Math.max(2,Math.min(100,(u.xp-base)/span*100))+'%';xp.append(bar);
-  b.append(el('div','xpt','Деңгей '+u.level+' · '+u.xp+' / '+u.xpNext+' XP'),xp);
-  const st=el('div','stats');
-  st.append(stat(u.rating,'Рейтинг'),stat('#'+u.rank,'Орын'),stat(u.games,'Ойын'),stat(u.wins,'Жеңіс'),stat(u.losses,'Жеңіліс'),stat(u.draws,'Тең'),stat(u.captures,'Қағылған жау'),stat(u.streak,'Қатар жеңіс'),stat(u.best_streak,'Үздік қатар'));
-  b.append(st);
-  if(data.medals&&data.medals.length){const c={1:0,2:0,3:0};data.medals.forEach(m=>c[m.place]++);b.append(el('p','xpt','🏅 Медальдар: 🥇'+c[1]+' 🥈'+c[2]+' 🥉'+c[3]))}
-  // edit
-  const ed=el('details');ed.style.margin='0 0 14px';
-  const sm=el('summary','','Профильді өзгерту');sm.style.cssText='font-weight:800;cursor:pointer;min-height:44px;display:flex;align-items:center';ed.append(sm);
-  let sa=u.avatar;
+  const u={...me,name:me.username};
+  const clan=data.clan||null;u.clan=clan;
+  const chips=el('div','chips');chips.append(el('span','chip','🪙 '+(me.coins>=1e8?'∞':me.coins)),el('span','chip','🏹 Жорық '+(me.camp||0)+'/10'),el('span','chip','🏆 '+data.achievements.length+'/'+Object.keys(data.catalog).length));
+  b.append(hero(u,data.catalog,chips));
+  b.append(statsBlock(u));
+  const ml=medalsLine((()=>{const c={1:0,2:0,3:0};(data.medals||[]).forEach(m=>c[m.place]++);return c})());if(ml)b.append(ml);
+  b.append(el('h2','','Таңдаулы жетістіктер'));
+  b.append(showcaseBlock((me.showcase||[]).filter(k=>data.catalog[k]),data.catalog));
+  const bt=el('button','btn ghost sm','Баптауға өту');bt.onclick=()=>profileView('set');b.append(bt);
+  b.append(el('h2','','Соңғы ойындар'));
+  b.append(histList(data.history,'Әзірше ойын жоқ. Ботқа қарсы ойна!'));
+}
+async function openUser(id,back){
+  const d=$('#dlg');d.textContent='';d.className='dlg big';
+  const h=el('div','dh');const bk=el('button','btn ghost sm','← Артқа');bk.onclick=()=>profileView(back||tab);h.append(bk,el('span'));
+  const x=el('button','x','×');x.onclick=closeOv;h.append(x);d.append(h);
+  const body=el('div');d.append(body);openOv();
+  const r=await api('me?p='+id);
+  if(!r.profile){body.append(el('p','err',r.error||'Қате'));return}
+  const u=r.profile;const cat=r.catalog;
+  const chips=el('div','chips');
+  chips.append(el('span','chip',u.online?'🟢 онлайн':'⚪ '+(u.online===false?'офлайн':'')),el('span','chip','📅 '+new Date(u.since).toLocaleDateString('kk-KZ')),el('span','chip','🏆 '+u.achCount));
+  body.append(hero(u,cat,chips));body.append(statsBlock(u));
+  const ml=medalsLine(u.medals);if(ml)body.append(ml);
+  body.append(el('h2','','Таңдаулы жетістіктер'));body.append(showcaseBlock(u.showcase,cat));
+  body.append(el('h2','','Соңғы ойындар'));body.append(histList(u.recent,'Әзірше ойын жоқ'));
+  if(me&&me.id!==u.id){
+    const row=el('div','prow');
+    const ad=el('button','btn','🤝 Дос қосу');ad.onclick=async()=>{ad.disabled=true;const x=await api('friends',{method:'POST',body:{action:'add',name:u.name}});if(x.ok)toast(x.state==='friends'?'🤝':'📨',x.state==='friends'?'Енді дос':'Сұраныс жіберілді',u.name);else toast('⚠️',x.error||'Қате')};
+    row.append(ad);body.append(row);
+  }
+}
+const lvOf=xp=>Math.floor(Math.sqrt(xp/50))+1;
+function renderSettings(b){
+  const u=me;let sa=u.avatar,sb=u.banner||'grass',st=u.title||'',sc=[...(u.showcase||[])];
+  const got=data.achievements.map(a=>a.key).filter(k=>data.catalog[k]);
+  b.append(el('h2','','Бейне'));
   const pk=el('div','pick');
   AV.forEach(t=>{const bt=el('button');bt.type='button';bt.setAttribute('aria-label',AVN[t]);bt.setAttribute('aria-pressed',t===sa);bt.append(avatarCanvas(t));
     bt.onclick=()=>{sa=t;pk.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));bt.setAttribute('aria-pressed','true')};pk.append(bt)});
-  const bf=el('div','fld');bf.style.marginTop='12px';const bl=el('label','','Өзің туралы (140 таңбаға дейін)');bl.htmlFor='fb';
-  const bi=el('textarea');bi.id='fb';bi.rows=2;bi.maxLength=140;bi.value=u.bio||'';bf.append(bl,bi);
+  b.append(pk);
+  b.append(el('h2','','Профиль фоны'));
+  const bp=el('div','bpick');
+  for(const k of data.banners){const x=el('button','bsw b-'+k,BN[k]||k);x.type='button';x.setAttribute('aria-pressed',k===sb);x.onclick=()=>{sb=k;bp.querySelectorAll('button').forEach(y=>y.setAttribute('aria-pressed',y===x))};bp.append(x)}
+  b.append(bp);
+  b.append(el('h2','','Атақ'));
+  const ts=el('select');ts.setAttribute('aria-label','Атақ');
+  const o0=el('option','','— атақсыз —');o0.value='';ts.append(o0);
+  for(const k of got){const o=el('option','',data.catalog[k].icon+' '+data.catalog[k].name);o.value=k;ts.append(o)}
+  ts.value=st;b.append(ts);
+  b.append(el('h2','','Таңдаулы жетістіктер (3-ке дейін)'));
+  const sp=el('div','spick');
+  const paint=()=>{sp.textContent='';for(const k of got){const a=data.catalog[k];const x=el('button','sch'+(sc.includes(k)?' on':''),a.icon+' '+a.name);x.type='button';x.onclick=()=>{if(sc.includes(k))sc=sc.filter(y=>y!==k);else if(sc.length<3)sc.push(k);else toast('ℹ️','Ең көбі 3');paint()};sp.append(x)}};
+  paint();b.append(sp);
+  const bf=el('div','fld');const bl=el('label','','Өзің туралы (140 таңбаға дейін)');bl.htmlFor='fb';
+  const bi=el('textarea');bi.id='fb';bi.rows=2;bi.maxLength=140;bi.value=u.bio||'';bf.append(bl,bi);b.append(bf);
+  const ho=el('label','chk');const hc=el('input');hc.type='checkbox';hc.checked=!!u.hide_online;ho.append(hc,document.createTextNode(' Онлайн екенімді жасыру'));b.append(ho);
   const sv=el('button','btn','Сақтау');
-  sv.onclick=async()=>{sv.disabled=true;const r=await api('me',{method:'PATCH',body:{avatar:sa,bio:bi.value}});sv.disabled=false;if(r.ok){await profileView('profile');toast('✅','Сақталды')}else toast('⚠️',r.error||'Қате')};
-  ed.append(pk,bf,sv);b.append(ed);
-  b.append(el('h2','','Соңғы ойындар'));
-  const ul=el('ul','hist');
-  if(!data.history.length){const li=el('li');li.append(el('span','','Әзірше ойын жоқ. Ботқа қарсы ойна!'));ul.append(li)}
-  for(const g of data.history){
-    const li=el('li');
-    const rl={win:'Жеңіс',loss:'Жеңіліс',draw:'Тең'}[g.result];
-    li.append(el('span',g.result,rl+' · '+(g.mode==='pvp'?'онлайн':'бот')),el('span','',g.moves+' жүріс · '+g.captures+' жау · '+new Date(g.created_at).toLocaleDateString('kk-KZ')));
-    ul.append(li);
-  }
-  b.append(ul);
-  const lo=el('button','btn ghost wide','Шығу');lo.style.marginTop='16px';
+  sv.onclick=async()=>{sv.disabled=true;const r=await api('me',{method:'PATCH',body:{avatar:sa,bio:bi.value,banner:sb,title:ts.value,showcase:sc,hide_online:hc.checked}});sv.disabled=false;if(r.ok){await profileView('profile');toast('✅','Сақталды')}else toast('⚠️',r.error||'Қате')};
+  b.append(sv);
+  b.append(el('h2','','Қауіпсіздік'));
+  const pw=el('div','clform');
+  const o=el('input');o.type='password';o.placeholder='Ескі құпия сөз';o.autocomplete='current-password';
+  const n=el('input');n.type='password';n.placeholder='Жаңа құпия сөз (6+)';n.autocomplete='new-password';
+  const pb=el('button','btn ghost','Құпия сөзді ауыстыру');
+  pb.onclick=async()=>{pb.disabled=true;const r=await api('me',{method:'PATCH',body:{pw:{old:o.value,new:n.value}}});pb.disabled=false;if(r.ok){o.value=n.value='';toast('🔐','Құпия сөз ауыстырылды')}else toast('⚠️',r.error||'Қате')};
+  pw.append(o,n,pb);b.append(pw);
+  const lo=el('button','btn ghost wide','Шығу');lo.style.marginTop='14px';
   lo.onclick=async()=>{await api('logout',{method:'POST',body:{}});me=null;data=null;renderBtn();closeOv();fireAuth('out');toast('👋','Сау бол!')};
   b.append(lo);
+  if(u.role!=='creator'){
+    const dz=el('details','dz');dz.append(el('summary','','Аккаунтты жою'));
+    const dp=el('input');dp.type='password';dp.placeholder='Құпия сөзді енгіз';
+    const db=el('button','btn ghost danger','Мәңгілікке жою');let armed=0;
+    db.onclick=async()=>{if(!armed){armed=1;db.textContent='Расымен жоясың ба?';setTimeout(()=>{armed=0;db.textContent='Мәңгілікке жою'},3000);return}
+      const r=await api('me',{method:'PATCH',body:{del:{pw:dp.value}}});
+      if(r.deleted){me=null;data=null;renderBtn();closeOv();fireAuth('out');toast('👋','Аккаунт жойылды')}else toast('⚠️',r.error||'Қате')};
+    dz.append(dp,db);b.append(dz);
+  }
 }
 async function renderFriends(b){
   const row=el('div','frow');
@@ -200,7 +299,7 @@ async function renderFriends(b){
   if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
   fr=r;renderBtn();
   const act=async(a,id,msg)=>{const x=await api('friends',{method:'POST',body:{action:a,id}});if(x.ok){if(msg)toast('✅',msg);await profileView('fr')}else toast('⚠️',x.error||'Қате')};
-  const mk=(u,sub)=>{const li=el('div','fitem');li.append(avatarCanvas(u.avatar,'fav'));const w=el('div','fn');w.append(el('b','',u.name+(u.role==='creator'?' 👑':'')),el('span','',sub));li.append(w);return li};
+  const mk=(u,sub)=>{const li=el('div','fitem');li.append(avatarCanvas(u.avatar,'fav'));const w=el('div','fn');const nb=el('b','link',u.name+(u.role==='creator'?' 👑':u.role==='moderator'?' 🛡️':''));nb.onclick=()=>openUser(u.id,'fr');w.append(nb,el('span','',sub));li.append(w);return li};
   if(r.incoming.length){
     b.append(el('h2','','Сұраныстар'));
     for(const u of r.incoming){
@@ -260,7 +359,7 @@ async function renderClan(b){
   b.append(el('h2','','Мүшелер'));
   for(const m of c.members){
     const li=el('div','fitem');li.append(avatarCanvas(m.avatar,'fav'));
-    const w=el('div','fn');w.append(el('b','',m.name+(m.role==='leader'?' 👑':'')),el('span','',(m.online?'🟢 ':'⚪ ')+m.rating));li.append(w);
+    const w=el('div','fn');const mb=el('b','link',m.name+(m.role==='leader'?' 👑':''));mb.onclick=()=>openUser(m.id,'clan');w.append(mb,el('span','',(m.online?'🟢 ':'⚪ ')+m.rating));li.append(w);
     if(c.you==='leader'&&m.role!=='leader'){let armed=0;const k=el('button','btn ghost sm','✕');k.setAttribute('aria-label','Шығару');k.onclick=()=>{if(!armed){armed=1;k.textContent='?';setTimeout(()=>{armed=0;k.textContent='✕'},2500);return}call({action:'kick',id:m.id},m.name+' шығарылды')};li.append(k)}
     b.append(li);
   }
@@ -392,42 +491,125 @@ async function renderTop(b){
   const t=el('table','lbt');
   r.rows.forEach((u,i)=>{
     const tr=el('tr',me&&u.username===me.username?'me':'');
-    const nm=el('td');const w=el('div','u');w.append(avatarCanvas(u.avatar),el('span','',u.username+(u.role==='creator'?' 👑':'')));nm.append(w);
+    const nm=el('td');const w=el('div','u link');w.append(avatarCanvas(u.avatar),el('span','',u.username+(u.role==='creator'?' 👑':u.role==='moderator'?' 🛡️':'')));w.onclick=()=>openUser(u.id,'top');nm.append(w);
     tr.append(el('td','',String(i+1)),nm,el('td','',u.wins+'/'+u.games),el('td','r',String(u.rating)));t.append(tr);
   });
   b.append(t);
 }
 
-async function renderAdmin(b,q){
+let admTab='stats',admQ='',admF='';
+const fmt=n=>Number(n).toLocaleString('kk-KZ');
+async function renderAdmin(b){
   b.textContent='';
-  const sf=el('div','fld');const si=el('input');si.type='search';si.placeholder='Ойыншыны іздеу…';si.value=q;si.setAttribute('aria-label','Іздеу');sf.append(si);
-  si.onkeydown=e=>{if(e.key==='Enter')renderAdmin(b,si.value)};
-  b.append(sf);
-  const r=await api('admin?q='+encodeURIComponent(q));
-  if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
-  b.append(el('p','xpt','Барлығы: '+r.total+' ойыншы'));
-  const ul=el('ul','adm');
-  for(const u of r.rows){
-    const li=el('li',u.banned?'ban':'');
-    const info=el('div','ai');info.append(el('b','',u.username+(u.role==='creator'?' 👑':'')+(u.banned?' · бұғатталған':'')),el('span','',u.games+' ойын · '+u.wins+' жеңіс · '+u.rating));
-    li.append(info);
-    if(u.role!=='creator'){
-      const act=el('div','aa');
-      const mk=(label,action,danger)=>{
-        const bt=el('button','sm'+(danger?' dg':''),label);bt.type='button';let armed=false;
-        bt.onclick=async()=>{
-          if(danger&&!armed){armed=true;bt.textContent='Растау?';setTimeout(()=>{armed=false;bt.textContent=label},3000);return}
-          bt.disabled=true;const x=await api('admin',{method:'POST',body:{id:u.id,action}});
-          if(!x.ok){toast('⚠️',x.error||'Қате');bt.disabled=false;return}
-          renderAdmin(b,si.value);
-        };act.append(bt)};
-      mk(u.banned?'Ашу':'Бұғаттау',u.banned?'unban':'ban',!u.banned);
-      mk('Нөлдеу','reset',true);mk('Жою','delete',true);
-      li.append(act);
-    }
-    ul.append(li);
+  const boss=me.role==='creator';
+  const sub=el('div','subtabs');
+  const tl=[['stats','📊 Шолу'],['users','👥 Ойыншылар'],['clans','🛡️ Кландар'],['matches','♟️ Ойындар'],['log','📣 Хабар · Журнал']];
+  for(const [k,l] of tl){const x=el('button','',l);x.setAttribute('aria-pressed',k===admTab);x.onclick=()=>{admTab=k;renderAdmin(b)};sub.append(x)}
+  b.append(sub);
+  const body=el('div','admbody');b.append(body);
+  const again=()=>renderAdmin(b);
+  const post=async(o,msg)=>{const x=await api('admin',{method:'POST',body:o});if(x.ok){if(msg)toast('✅',msg);return true}toast('⚠️',x.error||'Қате');return false};
+  const armBtn=(label,fn,cls)=>{const bt=el('button','sm '+(cls||''),label);bt.type='button';let a=0;bt.onclick=async()=>{if(!a){a=1;bt.textContent='Растау?';setTimeout(()=>{a=0;bt.textContent=label},3000);return}bt.disabled=true;await fn();bt.disabled=false};return bt};
+  if(admTab==='stats'){
+    const r=await api('admin?view=stats');if(!r.users){body.append(el('p','err',r.error||'Қате'));return}
+    const U=r.users;
+    const g=el('div','stats s4');
+    g.append(stat(fmt(U.total),'Ойыншы'),stat(U.online,'Қазір онлайн'),stat(U.dau,'24 сағатта кірген'),stat('+'+U.new24,'Жаңа (24 сағ)'),
+      stat('+'+U.new7,'Жаңа (7 күн)'),stat(r.matches.active,'Белсенді ойын'),stat(r.games.d1,'Ойын (24 сағ)'),stat(fmt(r.games.total),'Барлық ойын'),
+      stat(r.clans,'Клан'),stat(U.mods,'Модератор'),stat(U.banned,'Бұғатталған'),stat(fmt(U.coins),'Ойыншылардағы 🪙'));
+    body.append(g);
+    const mx=Math.max(1,...r.days.map(d=>Math.max(d.reg,d.games)));
+    body.append(el('h2','','Соңғы 7 күн'));
+    const ch=el('div','achart');
+    for(const d of r.days){const c=el('div','col');const b1=el('i','g');b1.style.height=(d.games/mx*100)+'%';b1.title='Ойын: '+d.games;const b2=el('i','r');b2.style.height=(d.reg/mx*100)+'%';b2.title='Тіркелу: '+d.reg;const bars=el('div','bars');bars.append(b1,b2);c.append(bars,el('span','',d.d));ch.append(c)}
+    body.append(ch,el('p','xpt','Жасыл — ойындар · сары — жаңа тіркелулер'));
+    if(r.top.length)body.append(el('p','xpt','🏆 Үздік: '+r.top.map(t=>t.username+' '+t.rating).join(' · ')));
   }
-  b.append(ul);
+  else if(admTab==='users'){
+    const row=el('div','frow');const si=el('input');si.type='search';si.placeholder='Ойыншыны іздеу…';si.value=admQ;si.setAttribute('aria-label','Іздеу');
+    const sel=el('select');sel.setAttribute('aria-label','Сүзгі');for(const [v,l] of [['','Барлығы'],['online','Онлайн'],['banned','Бұғатталған'],['staff','Команда']]){const o=el('option','',l);o.value=v;sel.append(o)}sel.value=admF;
+    const go=()=>{admQ=si.value;admF=sel.value;again()};si.onkeydown=e=>{if(e.key==='Enter')go()};sel.onchange=go;
+    row.append(si,sel);body.append(row);
+    const r=await api('admin?view=users&q='+encodeURIComponent(admQ)+'&f='+admF);if(!r.rows){body.append(el('p','err',r.error||'Қате'));return}
+    body.append(el('p','xpt','Барлығы: '+r.total+' · көрсетілді: '+r.rows.length));
+    const ul=el('ul','adm');
+    for(const u of r.rows){
+      const li=el('li',u.banned?'ban':'');
+      const top=el('div','atop');top.append(avatarCanvas(u.avatar,'fav'));
+      const info=el('div','ai');info.append(el('b','',u.username+(ROLE[u.role]?' '+ROLE[u.role].split(' ')[0]:'')+(u.banned?' · бұғатталған':'')),el('span','',u.games+' ойын · '+u.wins+' жеңіс · '+u.rating+' · 🪙'+(u.coins>=1e8?'∞':fmt(u.coins))+(u.last_seen?' · '+ago(u.last_seen):'')));
+      top.append(info);
+      const more=el('button','btn sm','Ашу');more.onclick=()=>admUser(b,u.id);top.append(more);
+      li.append(top);ul.append(li);
+    }
+    body.append(ul);
+  }
+  else if(admTab==='clans'){
+    const r=await api('admin?view=clans');if(!r.rows){body.append(el('p','err',r.error||'Қате'));return}
+    if(!r.rows.length)body.append(el('p','xpt','Клан жоқ'));
+    const ul=el('ul','adm');
+    for(const c of r.rows){const li=el('li');const t=el('div','atop');t.append(el('span','cemb',c.emblem));const i=el('div','ai');i.append(el('b','','['+c.tag+'] '+c.name),el('span','',c.n+' мүше · көшбасшы '+(c.owner||'—')+' · '+new Date(c.created_at).toLocaleDateString('kk-KZ')));t.append(i);
+      if(boss)t.append(armBtn('Жою',async()=>{if(await post({action:'clan_delete',id:c.id},'Клан жойылды'))again()},'dg'));li.append(t);ul.append(li)}
+    body.append(ul);
+  }
+  else if(admTab==='matches'){
+    const r=await api('admin?view=matches');if(!r.rows){body.append(el('p','err',r.error||'Қате'));return}
+    body.append(el('p','xpt','Белсенді және ашық ойындар (соңғы 24 сағат)'));
+    if(!r.rows.length)body.append(el('p','xpt','Қазір ойын жоқ'));
+    const ul=el('ul','adm');
+    for(const m of r.rows){const li=el('li');const t=el('div','atop');const i=el('div','ai');
+      i.append(el('b','','#'+m.id+' · '+(m.w||'?')+' ⚔ '+(m.b||(m.mode==='ai'?'бот':'—'))),el('span','',(m.mode==='ai'?(m.camp?'жорық '+m.camp:'бот'):'онлайн')+' · '+m.status+' · '+m.mv+' жүріс'+(m.tc?' · '+m.tc/60+' мин':'')+' · '+ago(m.updated_at)));t.append(i);
+      if(boss)t.append(armBtn('Аяқтау',async()=>{if(await post({action:'match_end',id:m.id},'Ойын аяқталды'))again()},'dg'));
+      li.append(t);ul.append(li)}
+    body.append(ul);
+  }
+  else{
+    const ta=el('textarea');ta.rows=2;ta.maxLength=280;ta.placeholder='Барлық ойыншыға хабарландыру…';ta.setAttribute('aria-label','Хабарландыру');
+    const sb=el('button','btn','📣 Жіберу');sb.onclick=async()=>{if(!ta.value.trim())return;sb.disabled=true;if(await post({action:'notice',text:ta.value},'Хабарландыру жіберілді'))again();sb.disabled=false};
+    body.append(el('h2','','Хабарландыру'),ta,sb);
+    const r=await api('admin?view=log');if(!r.rows){body.append(el('p','err',r.error||'Қате'));return}
+    if(r.notices.length){const nl=el('ul','hist');for(const n of r.notices){const li=el('li');li.append(el('span','',n.text),el('span','',n.by_name+' · '+ago(n.created_at)));nl.append(li)}body.append(nl);body.append(armBtn('Барлық хабарды өшіру',async()=>{if(await post({action:'notice_clear'},'Өшірілді'))again()},'dg'))}
+    body.append(el('h2','','Әрекеттер журналы'));
+    const ul=el('ul','hist');
+    if(!r.rows.length){const li=el('li');li.append(el('span','','Бос'));ul.append(li)}
+    for(const l of r.rows){const li=el('li');li.append(el('span','',l.admin_name+' · '+l.action+(l.target?' → '+l.target:'')+(l.detail?' ('+l.detail+')':'')),el('span','',ago(l.created_at)));ul.append(li)}
+    body.append(ul);
+  }
+}
+async function admUser(b,id){
+  b.textContent='';
+  const boss=me.role==='creator';
+  const back=el('button','btn ghost sm','← Тізімге');back.onclick=()=>renderAdmin(b);b.append(back);
+  const r=await api('admin?view=user&id='+id);if(!r.user){b.append(el('p','err',r.error||'Қате'));return}
+  const u=r.user;const again=()=>admUser(b,id);
+  const post=async(o,msg)=>{const x=await api('admin',{method:'POST',body:{id,...o}});if(x.ok){if(msg)toast('✅',msg);return true}toast('⚠️',x.error||'Қате');return false};
+  const hd=el('div','atop');hd.append(avatarCanvas(u.avatar,'fav'));const i=el('div','ai');
+  i.append(el('b','',u.username+(ROLE[u.role]?' · '+ROLE[u.role]:'')+(u.banned?' · бұғатталған':'')),el('span','','Деңгей '+lvOf(u.xp)+' · '+u.rating+' · 🪙'+(u.coins>=1e8?'∞':fmt(u.coins))+' · жорық '+u.camp+' · '+u.games+' ойын'+(u.clan?' · '+u.clan:'')));hd.append(i);
+  const op=el('button','btn ghost sm','Профиль');op.onclick=()=>openUser(id,'adm');hd.append(op);b.append(hd);
+  if(u.bio)b.append(el('p','pbio','«'+u.bio+'»'));
+  b.append(el('p','xpt','Тіркелген: '+new Date(u.created_at).toLocaleDateString('kk-KZ')+(u.last_seen?' · соңғы кіру: '+ago(u.last_seen):'')+' · жетістік: '+r.ach.length));
+  const act=el('div','aa');
+  const mk=(label,fn,danger)=>{const bt=el('button','sm'+(danger?' dg':''),label);bt.type='button';let a=0;bt.onclick=async()=>{if(danger&&!a){a=1;bt.textContent='Растау?';setTimeout(()=>{a=0;bt.textContent=label},3000);return}bt.disabled=true;const ok=await fn();bt.disabled=false;if(ok)again()};act.append(bt)};
+  if(u.role!=='creator'){
+    mk(u.banned?'Бұғатты ашу':'Бұғаттау',()=>post({action:u.banned?'unban':'ban'},u.banned?'Ашылды':'Бұғатталды'),!u.banned);
+    if(boss){
+      mk(u.role==='moderator'?'Модераторлықты алу':'🛡️ Модератор ету',()=>post({action:'role',role:u.role==='moderator'?'player':'moderator'},'Рөл өзгерді'));
+      mk('Профиль мәтінін тазалау',()=>post({action:'bio_clear'},'Тазаланды'));
+      mk('Статистиканы нөлдеу',()=>post({action:'reset'},'Нөлденді'),true);
+      mk('Аккаунтты жою',async()=>{if(await post({action:'delete'},'Жойылды')){renderAdmin(b)}return false},true);
+    }
+    b.append(act);
+    if(boss){
+      b.append(el('h2','','Тиын мен рейтинг'));
+      const r1=el('div','frow');const ci=el('input');ci.type='number';ci.placeholder='± тиын';const cb=el('button','btn','🪙 Беру');cb.onclick=async()=>{if(await post({action:'coins',n:ci.value},'Тиын өзгерді'))again()};r1.append(ci,cb);b.append(r1);
+      const r2=el('div','frow');const ri=el('input');ri.type='number';ri.placeholder='Рейтинг (100–3500)';ri.value=u.rating;const rb=el('button','btn','Қою');rb.onclick=async()=>{if(await post({action:'rating',n:ri.value},'Рейтинг өзгерді'))again()};r2.append(ri,rb);b.append(r2);
+      b.append(el('h2','','Сыйлық беру'));
+      const gv=el('div','spick');
+      const own=new Set([...(u.skins.own||[]),...(u.skins.pown||[])]);
+      const items=[...r.shop.filter(k=>k!=='grass').map(k=>[k,'🎨 '+(BN[k]||k)+' тақта']),...r.pshop.map(k=>[k,'♟️ '+k+' скин']),['camp','🏹 Бүкіл жорық'],['all_ach','🏆 Барлық жетістік']];
+      for(const [k,l] of items){const x=el('button','sch'+(own.has(k)?' on':''),l);x.type='button';x.onclick=async()=>{if(await post({action:'give',key:k},'Берілді'))again()};gv.append(x)}
+      b.append(gv);
+    }
+  } else b.append(el('p','xpt','Создательге әрекет жасауға болмайды.'));
 }
 
 /* ---------- game hooks ---------- */

@@ -46,12 +46,12 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return send(res, 405, { error: 'method' });
     await sql.query('UPDATE users SET last_seen=now() WHERE id=$1', [uid]);
     const rows = await sql.query(
-      `SELECT f.a, f.b, f.status, u.id AS uid, u.username, u.avatar, u.role, u.rating, u.last_seen,
+      `SELECT f.a, f.b, f.status, u.id AS uid, u.username, u.avatar, u.role, u.rating, u.last_seen, u.hide_online,
          (SELECT m.id FROM matches m WHERE m.mode='pvp' AND m.status='active' AND (m.white_id=u.id OR m.black_id=u.id) ORDER BY m.updated_at DESC LIMIT 1) AS playing
        FROM friendships f JOIN users u ON u.id = CASE WHEN f.a=$1 THEN f.b ELSE f.a END
        WHERE (f.a=$1 OR f.b=$1) AND NOT u.banned`, [uid]);
     const now = Date.now();
-    const pub = (r) => ({ id: r.uid, name: r.username, avatar: r.avatar, role: r.role, rating: r.rating, online: !!r.last_seen && now - new Date(r.last_seen).getTime() < ONLINE_MS, playing: r.playing || null });
+    const pub = (r) => ({ id: r.uid, name: r.username, avatar: r.avatar, role: r.role, rating: r.rating, online: !r.hide_online && !!r.last_seen && now - new Date(r.last_seen).getTime() < ONLINE_MS, playing: r.playing || null });
     const friends = rows.filter(r => r.status === 'accepted').map(pub).sort((x, y) => (y.online - x.online) || x.name.localeCompare(y.name));
     const incoming = rows.filter(r => r.status === 'pending' && r.b === uid).map(pub);
     const outgoing = rows.filter(r => r.status === 'pending' && r.a === uid).map(pub);

@@ -8,10 +8,10 @@ async function detail(cid, uid) {
   const c = (await sql.query('SELECT id, name, tag, emblem, descr, owner_id FROM clans WHERE id=$1', [cid]))[0];
   if (!c) return null;
   const rows = await sql.query(
-    `SELECT u.id, u.username, u.avatar, u.rating, u.role AS urole, u.last_seen, m.role
+    `SELECT u.id, u.username, u.avatar, u.rating, u.role AS urole, u.last_seen, u.hide_online, m.role
      FROM clan_members m JOIN users u ON u.id=m.user_id WHERE m.clan_id=$1 AND NOT u.banned ORDER BY (m.role='leader') DESC, u.rating DESC`, [cid]);
   const now = Date.now();
-  const members = rows.map(r => ({ id: r.id, name: r.username, avatar: r.avatar, rating: r.rating, role: r.role, online: !!r.last_seen && now - new Date(r.last_seen).getTime() < ONLINE_MS }));
+  const members = rows.map(r => ({ id: r.id, name: r.username, avatar: r.avatar, rating: r.rating, role: r.role, online: !r.hide_online && !!r.last_seen && now - new Date(r.last_seen).getTime() < ONLINE_MS }));
   const msgs = await sql.query(
     `SELECT g.id, u.username, g.text, g.created_at FROM clan_msgs g JOIN users u ON u.id=g.user_id WHERE g.clan_id=$1 ORDER BY g.id DESC LIMIT 30`, [cid]);
   return {
