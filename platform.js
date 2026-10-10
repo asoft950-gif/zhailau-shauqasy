@@ -535,7 +535,7 @@ function renderDaily(b){
   b.append(ul);
   b.append(el('p','xpt','Тиын әр рейтингті ойыннан және жетістіктен беріледі.'));
 }
-const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі']};
+const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі'],meadow:['🌳','Корольдік шалғын']};
 function renderShop(b){
   b.append(el('p','coins','🪙 '+me.coins+' тиын'));
   b.append(el('p','xpt','Тақта терілері'));

@@ -159,7 +159,7 @@ export const QUESTS = [
   { k: 'pvpwin', t: 'Адамды жең', goal: 1, reward: 50, col: "count(*) FILTER (WHERE result='win' AND mode='pvp')" }
 ];
 export const DAILY_BONUS = 50;
-export const SHOP = { grass: 0, night: 250, snow: 350, sand: 450, royal: 800 };
+export const SHOP = { grass: 0, night: 250, snow: 350, sand: 450, royal: 800, meadow: 700 };
 export async function dailyFor(uid) {
   const d = dayInfo();
   const picks = [0, 2, 4].map(i => QUESTS[(d.n + i) % QUESTS.length]);
