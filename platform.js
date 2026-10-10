@@ -150,7 +150,7 @@ async function profileView(t){
   const home=el('button','btn ghost sm','🏠 Басты бет');home.onclick=closeOv;h.append(home);
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг'],['set','Баптау']];if(me.role==='creator'||me.role==='moderator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['pass','Жол'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг'],['set','Баптау']];if(me.role==='creator'||me.role==='moderator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
@@ -160,6 +160,7 @@ async function profileView(t){
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
   else if(tab==='daily')renderDaily(body);
+  else if(tab==='pass')await renderPass(body);
   else if(tab==='fr')await renderFriends(body);
   else if(tab==='clan')await renderClan(body);
   else if(tab==='shop')renderShop(body);
@@ -489,6 +490,26 @@ async function openChestAnim(){
   if(o.rare>=2)card.classList.add('epic');else if(o.rare===1)card.classList.add('rare');
   tx.textContent=txt;window.__snd&&window.__snd('chime');
   const ok=el('button','btn','Керемет!');ok.onclick=async()=>{ov.remove();await refresh();if($('#dlg')&&tab==='daily')profileView('daily')};card.append(ok);
+}
+async function renderPass(b){
+  const r=await api('me?pass=1');const p=r.pass;
+  if(!p){b.append(el('p','err','Қате'));return}
+  const cur=Math.min(p.tiers.length,Math.floor(p.pts/p.step));
+  b.append(el('h2','','🏅 Маусымдық жол'));
+  b.append(el('p','xpt','Әр ойыннан ұпай: жеңіс 25, тең 15, жеңіліс 10. Аймен жаңарады: '+left(p.endsAt)+'. Саған: '+p.pts+' ұпай · '+cur+'/'+p.tiers.length+' деңгей.'));
+  const bar=el('div','qbar');const i=el('i');i.style.width=Math.min(100,p.pts/(p.step*p.tiers.length)*100)+'%';bar.append(i);b.append(bar);
+  const list=el('div','qlist');
+  for(const t of p.tiers){
+    const open=p.pts>=t.need;
+    const c=el('div','quest'+(t.claimed?' done':'')+(open&&!t.claimed?' bonus':''));
+    const w=el('div','qt');
+    const parts=[];if(t.c)parts.push('🪙'+t.c);if(t.k)parts.push('🎁×'+t.k);if(t.ps)parts.push('✨ фигура скині');if(t.bs)parts.push('🎨 тақта скині');
+    w.append(el('b','','#'+t.t+' · '+parts.join(' + ')),el('span','',open?'Ашық':(t.need-p.pts)+' ұпай қалды'));
+    const bt=el('button','btn',t.claimed?'✓':'Алу');bt.disabled=t.claimed||!open;
+    bt.onclick=async()=>{bt.disabled=true;const x=await patchMe({bp:t.t});if(x.error){toast('⚠️',x.error);bt.disabled=false;return}const o=x.bp||{};toast('🏅','Сыйлық алынды',[o.coins?'+'+o.coins+' 🪙':'',o.chests?'+'+o.chests+' 🎁':'',o.pskin?'✨ '+((PSN[o.pskin]||[])[1]||o.pskin):'',o.bskin?'🎨 '+((SKN[o.bskin]||[])[1]||o.bskin):''].filter(Boolean).join(' · '));await profileView('pass')};
+    c.append(w,bt);list.append(c);
+  }
+  b.append(list);
 }
 function renderDaily(b){
   const dl=data.daily;

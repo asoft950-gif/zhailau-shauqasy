@@ -318,3 +318,44 @@ export async function pushTo(uid, payload) {
     ]);
   } catch (e) { /* push is best-effort */ }
 }
+
+
+/* ---------- season pass (monthly, UTC+5): points come from games played this month ---------- */
+export const PASS_STEP = 100;
+export const PASS = [
+  { c: 20 }, { c: 30 }, { k: 1 }, { c: 40 }, { c: 50 }, { k: 1 }, { c: 60 }, { c: 70 }, { k: 1 }, { ps: 1, c: 200 },
+  { c: 80 }, { c: 90 }, { k: 1 }, { c: 100 }, { c: 120 }, { k: 2 }, { c: 150 }, { c: 200 }, { k: 1 }, { bs: 1, c: 300, k: 2 },
+];
+function monthWin() {
+  const n = dayInfo().n, d = new Date(n * 86400000);
+  const y = d.getUTCFullYear(), m = d.getUTCMonth();
+  const s = Date.UTC(y, m, 1), e = Date.UTC(y, m + 1, 1);
+  return { key: 'pm' + y + '-' + String(m + 1).padStart(2, '0'), start: new Date(s - H5), end: new Date(e - H5) };
+}
+export async function passInfo(uid) {
+  const w = monthWin();
+  const pts = Number((await sql.query("SELECT COALESCE(sum(CASE result WHEN 'win' THEN 25 WHEN 'draw' THEN 15 ELSE 10 END),0)::int AS p FROM games WHERE user_id=$1 AND created_at >= $2 AND created_at < $3", [uid, w.start.toISOString(), w.end.toISOString()]))[0].p);
+  const cl = new Set((await sql.query('SELECT key FROM claims WHERE user_id=$1 AND day=$2', [uid, w.key])).map(r => r.key));
+  return { season: w.key, endsAt: w.end.toISOString(), pts, step: PASS_STEP, tiers: PASS.map((r, i) => ({ t: i + 1, need: (i + 1) * PASS_STEP, c: r.c || 0, k: r.k || 0, ps: !!r.ps, bs: !!r.bs, claimed: cl.has('t' + (i + 1)) })) };
+}
+export async function passClaim(uid, tier) {
+  const i = Math.floor(Number(tier)) - 1, r = PASS[i];
+  if (!r) return null;
+  const w = monthWin(), info = await passInfo(uid);
+  if (info.pts < (i + 1) * PASS_STEP || info.tiers[i].claimed) return null;
+  const ins = await sql.query('INSERT INTO claims (user_id,day,key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING key', [uid, w.key, 't' + (i + 1)]);
+  if (!ins.length) return null;
+  const out = { coins: r.c || 0, chests: r.k || 0 };
+  const sk = (await sql.query('SELECT skins FROM users WHERE id=$1', [uid]))[0].skins || {};
+  if (r.ps) {
+    const free = Object.keys(PSKINS).filter(k => PSKINS[k].price > 0 && !(sk.pown || []).includes(k));
+    if (free.length) { const k = free[crypto.randomInt(free.length)]; await sql.query("UPDATE users SET skins=jsonb_set(skins,'{pown}', COALESCE(skins->'pown','[]'::jsonb) || to_jsonb($2::text)) WHERE id=$1", [uid, k]); out.pskin = k; out.coins = 0; }
+  }
+  if (r.bs) {
+    const free = Object.keys(SHOP).filter(k => SHOP[k] > 0 && !(sk.own || []).includes(k));
+    if (free.length) { const k = free[crypto.randomInt(free.length)]; await sql.query("UPDATE users SET skins=jsonb_set(skins,'{own}', (skins->'own') || to_jsonb($2::text)) WHERE id=$1", [uid, k]); out.bskin = k; }
+  }
+  if (out.coins) await sql.query('UPDATE users SET coins=coins+$2 WHERE id=$1', [uid, out.coins]);
+  if (out.chests) await giveChest(uid, out.chests);
+  return out;
+}

@@ -1,4 +1,4 @@
-import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, streakInfo, checkin, openChest, SHOP, PSKINS, unlockedPieceSkins, CAMP, vapidKeys, hashPw, checkPw, clearSession } from './_lib.js';
+import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, streakInfo, checkin, openChest, SHOP, PSKINS, unlockedPieceSkins, CAMP, vapidKeys, passInfo, passClaim, hashPw, checkPw, clearSession } from './_lib.js';
 
 export const BANNERS = ['grass', 'dusk', 'night', 'snow', 'sand', 'royal', 'fire', 'sea'];
 const ONLINE_MS = 75000;
@@ -35,6 +35,7 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && req.query && req.query.vapid !== undefined) return send(res, 200, { key: vapidKeys().publicKey });
     if (!uid) return send(res, 200, { user: null, notice: await notice() });
+    if (req.method === 'GET' && req.query && req.query.pass !== undefined) return send(res, 200, { pass: await passInfo(uid) });
     const bn = await sql.query('SELECT banned FROM users WHERE id=$1', [uid]);
     if (!bn.length || bn[0].banned) return send(res, 200, { user: null, notice: await notice() });
     if (req.method === 'PATCH') {
@@ -52,6 +53,11 @@ export default async function handler(req, res) {
         await sql.query('INSERT INTO push_subs (endpoint,user_id,p256dh,auth) VALUES ($1,$2,$3,$4) ON CONFLICT (endpoint) DO UPDATE SET user_id=$2, p256dh=$3, auth=$4', [ep, uid, k1, k2]);
       }
       if (b.pushOff) await sql.query('DELETE FROM push_subs WHERE user_id=$1 AND endpoint=$2', [uid, String(b.pushOff)]);
+      if (b.bp) {
+        const o = await passClaim(uid, b.bp);
+        if (!o) return send(res, 400, { error: 'Алу мүмкін емес' });
+        b.__bp = o;
+      }
       if (b.checkin) {
         const c = await checkin(uid);
         if (!c) return send(res, 400, { error: 'Бүгін алынған' });
@@ -107,7 +113,7 @@ export default async function handler(req, res) {
         return send(res, 200, { ok: true, deleted: true });
       }
       if (b.bio !== undefined) await sql.query('UPDATE users SET bio=$1 WHERE id=$2', [String(b.bio).slice(0, 140), uid]);
-      req.__extra = { checkin: b.__ci, opened: b.__open };
+      req.__extra = { checkin: b.__ci, opened: b.__open, bp: b.__bp };
     }
     /* creator: unlimited coins, every skin, every campaign stage, every achievement (for testing) */
     const cr = await sql.query("UPDATE users SET coins=GREATEST(coins,900000000), camp=GREATEST(camp,$2), skins=jsonb_set(jsonb_set(skins,'{own}',$3::jsonb),'{pown}',$4::jsonb) WHERE id=$1 AND role='creator' AND NOT banned RETURNING id", [uid, CAMP.length, JSON.stringify(Object.keys(SHOP)), JSON.stringify(Object.keys(PSKINS))]);
