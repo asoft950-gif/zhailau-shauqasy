@@ -9,6 +9,12 @@
 <meta name="theme-color" content="#0D1322" media="(prefers-color-scheme: dark)">
 <meta property="og:title" content="Жайлау Шайқасы"><meta property="og:description" content="Тірі фигуралары бар дала шахматы"><meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='22' fill='%23F4C840' stroke='%237A4B00' stroke-width='2.4'/%3E%3Ccircle cx='24' cy='24' r='12.5' fill='%234C56CC' stroke='%237A4B00' stroke-width='2.2'/%3E%3Ccircle cx='24' cy='19.5' r='3.6' fill='%23F4C840'/%3E%3Cpath d='M19 31.5c0-3.4 2.2-6 5-6s5 2.6 5 6z' fill='%23F4C840'/%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Жайлау">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="platform.css">
@@ -2066,5 +2072,6 @@ if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{buildBoar
 requestAnimationFrame(frame);
 })();
 </script>
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}))</script>
 </body>
 </html>
