@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Жайлау Шайқасы</title>
+<title>Жайлау Шайқасы — тірі шахмат</title>
+<meta name="description" content="Шахмат ережесі сол, бірақ фигуралар тірі: қоян, жылқы, түйе, жылан, бүркіт және батыр. Ботқа қарсы немесе онлайн ойна.">
+<meta name="theme-color" content="#F4F0DF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1322" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Жайлау Шайқасы"><meta property="og:description" content="Тірі фигуралары бар дала шахматы"><meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='22' fill='%23F4C840' stroke='%237A4B00' stroke-width='2.4'/%3E%3Ccircle cx='24' cy='24' r='12.5' fill='%234C56CC' stroke='%237A4B00' stroke-width='2.2'/%3E%3Ccircle cx='24' cy='19.5' r='3.6' fill='%23F4C840'/%3E%3Cpath d='M19 31.5c0-3.4 2.2-6 5-6s5 2.6 5 6z' fill='%23F4C840'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="platform.css">
@@ -68,17 +73,34 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 .card .long{color:var(--muted);font-size:.82rem;margin-top:2px}
 @media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
 </style>
+<link rel="stylesheet" href="theme.css">
 </head>
 <body>
+<div class="sky" aria-hidden="true"></div>
 <main class="app">
-  <header>
+  <header class="hero">
+    <svg class="hero-art" viewBox="0 0 800 240" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+      <defs><radialGradient id="sg"><stop offset="0" stop-color="var(--sunc1)"/><stop offset="1" stop-color="var(--sunc2)"/></radialGradient></defs>
+      <g class="stars"><circle cx="90" cy="40" r="1.4"/><circle cx="210" cy="24" r="1.1"/><circle cx="330" cy="56" r="1.5"/><circle cx="470" cy="30" r="1.2"/><circle cx="560" cy="62" r="1"/><circle cx="740" cy="26" r="1.4"/><circle cx="410" cy="78" r="1"/></g>
+      <circle class="sunglow" cx="655" cy="98" r="78"/>
+      <circle cx="655" cy="98" r="40" fill="url(#sg)"/>
+      <g class="rays" stroke-linecap="round"><path d="M655 38v-14M655 158v14M595 98h-14M715 98h14M612 55l-10-10M698 141l10 10M698 55l10-10M612 141l-10 10"/></g>
+      <path class="hill h1" d="M0 168C90 140 170 150 260 160S430 150 520 158 700 140 800 156V240H0z"/>
+      <path class="hill h2" d="M0 190C110 168 210 182 330 190S560 172 680 184 770 186 800 182V240H0z"/>
+      <g class="yurt" transform="translate(300 160)"><path d="M-34 24v-18c0-2 2-4 4-4h60c2 0 4 2 4 4v18z" class="y1"/><path d="M-40 4C-32-22 32-22 40 4z" class="y2"/><path d="M-6 24v-14c0-2 1-3 3-3h6c2 0 3 1 3 3v14z" class="y3"/><circle cx="0" cy="-12" r="3" class="y3"/></g>
+      <g class="yurt" transform="translate(385 176) scale(.62)"><path d="M-34 24v-18c0-2 2-4 4-4h60c2 0 4 2 4 4v18z" class="y1"/><path d="M-40 4C-32-22 32-22 40 4z" class="y2"/></g>
+      <path class="hill h3" d="M0 214C120 198 230 208 360 214S600 202 800 212V240H0z"/>
+      <g class="birds"><path d="M330 70q8-9 16 0q8-9 16 0" /><path d="M392 52q6-7 12 0q6-7 12 0" /><path d="M450 84q5-6 10 0q5-6 10 0" /></g>
+    </svg>
     <div class="top">
-      <h1>Жайлау Шайқасы</h1>
+      <div class="brand"><svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#F4C840" stroke="#7A4B00" stroke-width="2.4"/><g stroke="#7A4B00" stroke-width="2.2" stroke-linecap="round"><path d="M24 3.5v4.5M24 40v4.5M3.5 24H8M40 24h4.5M9.5 9.5l3.2 3.2M35.3 35.3l3.2 3.2M38.5 9.5l-3.2 3.2M12.7 35.3l-3.2 3.2"/></g><circle cx="24" cy="24" r="12.5" fill="#4C56CC" stroke="#7A4B00" stroke-width="2.2"/><circle cx="24" cy="19.5" r="3.6" fill="#F4C840"/><path d="M19 31.5c0-3.4 2.2-6 5-6s5 2.6 5 6z" fill="#F4C840"/></svg><div><h1>Жайлау Шайқасы</h1><p class="tagline">Тірі фигуралар. Дала шахматы.</p></div></div>
       <div class="topr"><button class="sndb" id="sndBtn" type="button" aria-pressed="true" aria-label="Дыбысты өшіру">🔊</button><button class="acct out" id="acct" type="button">Кіру / Тіркелу</button></div>
     </div>
-    <p class="sub">Шахмат ережесі сол, бірақ фигуралар тірі. Әрқайсысы өз қабілетімен жүреді және жауын өз тәсілімен құлатады.</p>
   </header>
+  <p class="sub">Шахмат ережесі сол, бірақ фигуралар тірі. Әрқайсысы өз қабілетімен жүреді және жауын өз тәсілімен құлатады.</p>
 
+  <div class="cols">
+  <div class="col-main">
   <div class="bar">
     <div class="turn" role="status" aria-live="polite"><span class="dot" id="dot"></span><span id="turnText">Күн жағының жүрісі</span></div>
     <div class="seg" role="group" aria-label="Ойын түрі">
@@ -105,7 +127,9 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 
   <div class="pbar" id="pbBot" hidden></div>
   <p class="hint" id="hint"></p>
+  </div>
 
+  <div class="col-side">
   <div class="controls">
     <button class="btn" id="bNew">Жаңа ойын</button>
     <button class="btn ghost" id="bUndo">Артқа қайту</button>
@@ -122,8 +146,10 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <h2>Кейіпкерлер</h2>
     <div class="cards" id="cards"></div>
   </section>
+  </div>
+  </div>
 </main>
-<footer class="foot app" id="foot" style="max-width:560px;margin:14px auto 0"></footer>
+<footer class="foot" id="foot"></footer>
 <div class="ov" id="ov" hidden><div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-label="Аккаунт"></div></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script src="platform.js" defer></script>
@@ -587,6 +613,12 @@ function buildBoard(){
     c.fillStyle='#F2A900';c.beginPath();c.arc(x,y,pr*.8,0,TAU);c.fill();
   }
   c.strokeStyle='rgba(0,0,0,.35)';c.lineWidth=2;c.strokeRect(pad,pad,T*8,T*8);
+  { // gold inlay + corner studs on the wooden frame
+    const k=pad*.17;
+    const gg=c.createLinearGradient(0,0,S,S);gg.addColorStop(0,'#F6D77A');gg.addColorStop(.5,'#B98A2A');gg.addColorStop(1,'#F2CC63');
+    c.strokeStyle=gg;c.lineWidth=Math.max(1.2,pad*.07);c.beginPath();c.roundRect(k,k,S-2*k,S-2*k,Math.max(3,S*.02));c.stroke();
+    for(const [x,y] of [[k,k],[S-k,k],[k,S-k],[S-k,S-k]]){c.fillStyle=gg;c.beginPath();c.arc(x,y,pad*.13,0,TAU);c.fill();c.strokeStyle='rgba(60,30,0,.6)';c.lineWidth=1;c.stroke()}
+  }
   c.fillStyle='rgba(255,240,210,.78)';c.font='800 '+Math.max(9,pad*.5)+'px Nunito, sans-serif';c.textAlign='center';c.textBaseline='middle';
   for(let i=0;i<8;i++){
     c.fillText('abcdefgh'[flip?7-i:i],pad+(i+.5)*T,S-pad*.5);
@@ -927,6 +959,7 @@ function rest2(a){a.z=0;a.sx=1;a.sy=1;a.rot=0;a.strike=0;a.lean=0;a.wing=0;a.rea
 function setStatus(txt,c){
   $('#turnText').textContent=txt;
   $('#dot').style.background=c==='b'?'#5560D6':'#F2C94C';
+  document.documentElement.style.setProperty('--glow',c==='b'?'rgba(85,96,214,.6)':'rgba(242,201,76,.65)');
 }
 function renderLost(){
   for(const c of ['w','b']){
@@ -1119,7 +1152,7 @@ function setFlip(v){if(flip!==v){flip=v;buildBoard()}}
 
 /* ---- players bars, buttons ---- */
 function fillBar(box,info,c){
-  box.hidden=false;box.textContent='';
+  box.hidden=false;box.textContent='';box.dataset.side=c;
   box.classList.toggle('on',!!net&&net.status==='active'&&!over&&turn===c);
   const cv=el('canvas','pav2');box.append(cv);
   requestAnimationFrame(()=>drawIcon(cv,info.avatar||(info.bot?'K':'P'),c,0));
