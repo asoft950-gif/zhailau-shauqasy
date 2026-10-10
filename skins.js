@@ -408,7 +408,47 @@ const LIGHT={name:'Light fantasy',pal:LP,sc:{P:1,N:.92,B:1.04,R:1,Q:1.02,K:1.02}
 function star(c,P,x,y,r){c.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rr=i%2?r*.45:r;c.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}c.closePath();c.fillStyle=P.accent;c.fill();c.lineWidth=1.5;c.strokeStyle=P.line;c.stroke()}
 for(const k in LIGHT.draw)LIGHT.draw[k]=wrap(LIGHT.draw[k]);
 
-const T={classic,heroes:HEROES,alien:ALIEN,space:SPACE,dark:DARK,light:LIGHT};
+
+/* ============ ROYAL KNIGHTS (hand-painted raster sprites: 4 walk + 4 attack frames per side) ============ */
+const RK_META={K:{w:158,h:122,ax:59.6,ay:122.6},Q:{w:153,h:127,ax:69.7,ay:126.4},B:{w:160,h:123,ax:59.2,ay:123.9},N:{w:168,h:139,ax:63.8,ay:138.6},R:{w:152,h:122,ax:66.4,ay:121.8},P:{w:165,h:128,ax:58.8,ay:128.1}};
+const RK_U=160/(534*0.42); /* local units per atlas pixel (frame = 1.6 tiles) */
+const RK_IMG={};
+function rkImg(t){
+  let e=RK_IMG[t];if(e)return e;
+  e=RK_IMG[t]={img:new Image(),ok:false};
+  e.img.onload=()=>{e.ok=true;const f=globalThis.__skinReady;if(f)f()};
+  e.img.src='skins/knights/'+t+'.webp';
+  return e;
+}
+function rkFrame(o){
+  const s=o.strike||0;
+  if(s<-.05)return 4;
+  if(s>.05)return s<.3?5:s<.7?6:7;
+  if((o.rear||0)>.05)return o.rear>.6?5:4;
+  if(o.mood==='angry'&&!o.moving)return 6;
+  if(o.moving)return Math.floor((o.ph||0)*1.1)%4;
+  return 0;
+}
+const rkDraw=t=>(c,P,o)=>{
+  const e=rkImg(t),m=RK_META[t];
+  if(!e.ok){c.save();c.globalAlpha*=.35;c.fillStyle=P.main;c.beginPath();c.ellipse(0,-30,16,28,0,0,TAU);c.fill();c.restore();return}
+  const fr=rkFrame(o),col=fr%4,row=(P.team==='b'?2:0)+(fr>=4?1:0);
+  const bob=o.moving?-Math.abs(Math.sin((o.ph||0)*1.6))*1.5:Math.sin(o.t*2.2+o.id)*-.6;
+  const dead=o.mood==='dead';
+  c.save();
+  if(dead)c.translate(0,5);
+  c.drawImage(e.img,col*m.w,row*m.h,m.w,m.h,-m.ax*RK_U,-m.ay*RK_U+2+bob,m.w*RK_U,m.h*RK_U);
+  c.restore();
+};
+const RKP={
+  w:{main:'#C9D3E3',light:'#F4F7FC',dark:'#6C7A93',line:'#1F2A44',accent:'#3A62C8',team:'w'},
+  b:{main:'#8A2B33',light:'#C9565E',dark:'#3A1218',line:'#1E0A0D',accent:'#D1453B',team:'b'}
+};
+const KNIGHTS={pending:t=>!rkImg(t).ok,name:'Корольдік гвардия',desc:'Күміс және обсидиан рыцарьлары',pal:RKP,sc:{P:1,N:1,B:1,R:1,Q:1,K:1},
+  names:{P:'Жаяу рыцарь',N:'Салт атты',B:'Сиқыршы',R:'Мұнара сақшысы',Q:'Патшайым',K:'Патша'},
+  draw:{P:rkDraw('P'),N:rkDraw('N'),B:rkDraw('B'),R:rkDraw('R'),Q:rkDraw('Q'),K:rkDraw('K')}};
+
+const T={classic,heroes:HEROES,alien:ALIEN,space:SPACE,dark:DARK,light:LIGHT,knights:KNIGHTS};
 T.__kit={poly,crv,eyes,glow,wrap,human,horse,SKINTONE,STEEL_,sword};
 return T;
 }

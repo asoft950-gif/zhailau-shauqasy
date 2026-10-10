@@ -578,7 +578,7 @@ async function renderCup(b,period){
   }
   b.append(t);
 }
-const PSN={classic:['♟️','Классика'],beast:['🐇','Жайлау жануарлары'],heroes:['🛡️','Батырлар'],alien:['👽','Инопланетяндар'],space:['🚀','Ғарыш сарбаздары'],dark:['💀','Dark fantasy'],light:['🦄','Light fantasy']};
+const PSN={classic:['♟️','Классика'],beast:['🐇','Жайлау жануарлары'],heroes:['🛡️','Батырлар'],alien:['👽','Инопланетяндар'],space:['🚀','Ғарыш сарбаздары'],dark:['💀','Dark fantasy'],light:['🦄','Light fantasy'],knights:['⚔️','Корольдік гвардия']};
 function renderPieceShop(b){
   b.append(el('p','xpt','Фигура скиндері: жетістікпен ашылады немесе тиынға сатып алынады'));
   const own=new Set(data.punlocked||[]),cur=me.skins.piece||'beast';

@@ -252,7 +252,8 @@ export async function openChest(uid) {
 export const PSKINS = {
   classic: { price: 0 }, beast: { price: 0 },
   heroes: { price: 500, ach: ['wins_10', 'camp_3'] }, alien: { price: 600, ach: ['pvp_win', 'camp_5'] }, space: { price: 700, ach: ['streak_5', 'camp_7'] },
-  dark: { price: 800, ach: ['wins_25', 'camp_10'] }, light: { price: 800, ach: ['rating_1200', 'puzzle_1'] }
+  dark: { price: 800, ach: ['wins_25', 'camp_10'] }, light: { price: 800, ach: ['rating_1200', 'puzzle_1'] },
+  knights: { price: 900, ach: ['wins_25', 'pvp_win'] }
 };
 export async function unlockedPieceSkins(u) {
   const have = new Set((u.skins && u.skins.pown) || []);

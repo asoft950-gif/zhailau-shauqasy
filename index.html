@@ -2211,12 +2211,14 @@ function applyPSkins(){
   for(const ic of icons)ic.cv._ik='';
 }
 window.__applyPSkins=applyPSkins;
+let skReady=0;window.__skinReady=()=>{if(skReady)return;skReady=requestAnimationFrame(()=>{skReady=0;bakes.clear();for(const ic of icons)ic.cv._ik='';renderLost();renderBars();renderCards();setHint(sel>=0?board[sel]:null)})};
 window.__iconSkin=(cvs,id,t,c)=>{
   const sk=SKS[id];if(!sk)return;
   const sz=cvs.width,x=cvs.getContext('2d');x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,sz,sz);
   x.translate(sz/2,sz*.93);const sc=sz/100*((sk.sc&&sk.sc[t])||SC[t])*.95;x.scale(sc,sc);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
   sk.draw[t](x,sk.pal[c],{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  if(sk.pending&&sk.pending(t)&&(cvs._rt=(cvs._rt||0)+1)<12)setTimeout(()=>window.__iconSkin(cvs,id,t,c),350);
 };
 window.__forceSkin=n=>{pskin={w:n,b:n};renderCards();renderLost();for(const ic of icons)ic.cv._ik='';bakes.clear()};
 function applySkin(){applyPSkins();const P=PL();window.__setSkin(P.skin?P.skin():'grass')}
