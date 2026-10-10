@@ -81,7 +81,7 @@ async function view(m, uid) {
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
-    team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
+    draw: m.draw_by || null, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
@@ -95,7 +95,7 @@ async function finish(m, winner, reason) {
   if (!r.length) return null;
   const row = r[0];
   const { log } = replay(row.moves);
-  const rated = !row.team && (row.moves.length >= 8 || (row.mode === 'pvp' && ['timeout', 'time'].includes(reason) && row.moves.length >= 2));
+  const rated = !row.team && (reason !== 'agreed' || row.moves.length >= 20) && (row.moves.length >= 8 || (row.mode === 'pvp' && ['timeout', 'time'].includes(reason) && row.moves.length >= 2));
   const awards = {};
   if (rated) {
     const res = (side) => (winner === null ? 'draw' : winner === side ? 'win' : 'loss');
@@ -293,6 +293,21 @@ export default async function handler(req, res) {
       const m2 = await load(m.id);
       return send(res, 200, { match: await view(m2, uid), awards: f && f.awards[seat] || null });
     }
+    if (b.action === 'draw_offer' || b.action === 'draw_accept' || b.action === 'draw_decline') {
+      if (m.mode !== 'pvp' || m.moves.length < 2) return send(res, 400, { error: 'Қазір ұсыну мүмкін емес' });
+      if (await limited(req, 'draw' + uid, 30, 300)) return send(res, 429, { error: 'Тым жиі' });
+      const opp = seat === 'w' ? 'b' : 'w';
+      if (b.action === 'draw_decline') {
+        await sql.query("UPDATE matches SET draw_by=NULL, ver=ver+1 WHERE id=$1 AND status='active' AND draw_by=$2", [m.id, opp]);
+      } else if (b.action === 'draw_accept' || m.draw_by === opp) {
+        if (m.draw_by !== opp) return send(res, 400, { error: 'Ұсыныс жоқ' });
+        const f = await finish(m, null, 'agreed');
+        return send(res, 200, { match: await view(await load(m.id), uid), awards: f && f.awards[seat] || null });
+      } else {
+        await sql.query("UPDATE matches SET draw_by=$2, ver=ver+1 WHERE id=$1 AND status='active' AND draw_by IS NULL", [m.id, seat]);
+      }
+      return send(res, 200, { match: await view(await load(m.id), uid) });
+    }
     if (b.action === 'claim') {
       const opp = seat === 'w' ? 'b' : 'w';
       const seen = new Date(m[`seen_${opp}`]).getTime();
@@ -331,7 +346,7 @@ export default async function handler(req, res) {
         clk = seat === 'w' ? { cw: left, cb: c.cb } : { cw: c.cw, cb: left };
       }
       const upd = await sql.query(
-        `UPDATE matches SET moves=$1::jsonb, ver=ver+1, updated_at=now(), seen_${seat}=now(), cw=COALESCE($4, cw), cb=COALESCE($5, cb), turn_at=now() WHERE id=$2 AND ver=$3 AND status='active' RETURNING *`,
+        `UPDATE matches SET moves=$1::jsonb, ver=ver+1, updated_at=now(), seen_${seat}=now(), draw_by=CASE WHEN draw_by='${seat}' THEN draw_by ELSE NULL END, cw=COALESCE($4, cw), cb=COALESCE($5, cb), turn_at=now() WHERE id=$2 AND ver=$3 AND status='active' RETURNING *`,
         [JSON.stringify(moves), m.id, m.ver, clk && clk.cw, clk && clk.cb]);
       if (!upd.length) return send(res, 409, { error: 'Синхрон бұзылды', match: await view(await load(m.id), uid) });
       let awards = null;

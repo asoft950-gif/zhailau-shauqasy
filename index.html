@@ -151,6 +151,8 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
   <div class="controls">
     <button class="btn" id="bNew">Жаңа ойын</button>
     <button class="btn ghost" id="bUndo">Артқа қайту</button>
+    <button class="btn ghost" id="bDraw" hidden>🤝 Тең ұсыну</button>
+    <div id="drawBox" class="drawbox" hidden><span>Қарсылас тең ойын ұсынды</span><button class="btn sm" id="dYes">Қабылдау</button><button class="btn ghost sm" id="dNo">Бас тарту</button></div>
     <button class="btn ghost" id="bResign" hidden>Берілу</button>
     <button class="btn ghost" id="bClaim" hidden>Қарсылас жоқ: жеңісті талап ету</button>
   </div>
@@ -1108,7 +1110,7 @@ function afterMove(silent){
 }
 function showResult(){
   if(rp||mode==='puz'){$('#result').hidden=true;return}
-  const R={repetition:'Бір позиция 3 рет қайталанды — тең ойын.',time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
+  const R={agreed:'Екі жақ келісіп тең ойнады.',repetition:'Бір позиция 3 рет қайталанды — тең ойын.',time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
   let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
   const cw=campStage&&winner==='w'&&net&&net.you==='w';
@@ -1345,6 +1347,9 @@ function refreshUI(){
   renderEmo();renderWatchInfo();
   $('#bUndo').hidden=!!net||mode==='net'||mode==='puz';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
+  {const pv=net&&net.you&&net.mode==='pvp'&&net.status==='active'&&!over&&net.moves.length>=2;
+   const bd=$('#bDraw');bd.hidden=!pv;bd.disabled=!!pv&&net.draw===net.you;bd.textContent=pv&&net.draw===net.you?'🤝 Ұсыныс жіберілді…':'🤝 Тең ұсыну';
+   $('#drawBox').hidden=!(pv&&net.draw&&net.draw!==net.you)}
   $('#lvlSeg').hidden=mode!=='ai'||campStage>0;
   const bn=$('#bNew');
   bn.hidden=mode==='net'&&net&&net.you&&net.status!=='done';
@@ -1362,7 +1367,7 @@ setInterval(updateClaim,5000);
 const teamCount=n=>[n.white,n.white2,n.black,n.black2].filter(x=>x&&x.id).length;
 function adoptNet(m){
   clearTimeout(pollT);
-  net={team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
+  net={draw:m.draw||null,team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
   setClk(m);
   lastChange=Date.now();
 }
@@ -1382,7 +1387,7 @@ function netApply(m){
   if(!net||m.id!==net.id)return;
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
-  net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
+  net.draw=m.draw||null;net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
   setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
@@ -1676,7 +1681,7 @@ async function loadLive(card){
   }
   if(rc.recent&&rc.recent.length){
     card.append(el('h4','','🎞 Соңғы ойындар'));
-    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең',repetition:'қайталану'};
+    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең',repetition:'қайталану',agreed:'келісім'};
     for(const g of rc.recent){
       const w=g.winner==='w'?'🏆 ':'',bl=g.winner==='b'?'🏆 ':'';
       const b=el('button','btn ghost live',w+g.wn+' ⚔ '+bl+g.bn+' · '+g.plies+' жүріс · '+(RN[g.reason]||g.reason));
@@ -1975,6 +1980,10 @@ $('#bResign').addEventListener('click',async e=>{
   if(net===n&&r.match)netApply(r.match);
   else if(!r.ok)PL().toast('⚠️',r.error||'Қате');
 });
+const drawCall=async a=>{const n=net;if(!n)return;const r=await napi({action:a,id:n.id});if(net===n&&r.match){netApply(r.match);if(a==='draw_offer'&&r.match.status==='active')PL().toast('🤝','Тең ойын ұсынылды','Қарсылас жауап бергенше күт')}else PL().toast('⚠️',r.error||'Қате')};
+$('#bDraw').addEventListener('click',()=>drawCall('draw_offer'));
+$('#dYes').addEventListener('click',()=>drawCall('draw_accept'));
+$('#dNo').addEventListener('click',()=>drawCall('draw_decline'));
 $('#bClaim').addEventListener('click',async()=>{
   const n=net;if(!n)return;
   const r=await napi({action:'claim',id:n.id});

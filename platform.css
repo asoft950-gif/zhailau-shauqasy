@@ -228,3 +228,6 @@
 .warbox h2{margin:0}
 .warme{font-weight:700;margin:0}
 .warbox .fitem.me{outline:2px solid #e0a020}
+
+.drawbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--panel);border:2px solid #e0a020;border-radius:14px;padding:8px 12px;font-weight:700;animation:pulse 1.4s infinite}
+.drawbox[hidden]{display:none}
