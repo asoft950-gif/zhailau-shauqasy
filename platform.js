@@ -113,11 +113,16 @@ function authView(mode){
   f.onsubmit=async e=>{
     e.preventDefault();er.textContent='';
     sb.disabled=true;
-    const r=await api(mode==='login'?'login':'register',{method:'POST',body:{username:ui.value,password:pi.value,avatar:av}});
+    let gp=null;if(mode!=='login'){try{gp=JSON.parse(localStorage.getItem('gp')||'null')}catch(e){}}
+    const r=await api(mode==='login'?'login':'register',{method:'POST',body:{username:ui.value,password:pi.value,avatar:av,guest:gp||undefined}});
     sb.disabled=false;
     if(!r.ok){er.textContent=r.error||'Қате';return}
     await refresh();closeOv();fireAuth('in');
-    toast('👋',mode==='login'?'Қош келдің, '+me.username+'!':'Тіркелдің, '+me.username+'!','Ботқа қарсы ойнап, жетістік жина');
+    if(mode==='login')toast('👋','Қош келдің, '+me.username+'!','Ботқа қарсы ойнап, жетістік жина');
+    else{
+      try{localStorage.removeItem('gp')}catch(e){}
+      toast('🎁','Тіркелдің, '+me.username+'!','+'+((r.gift&&r.gift.coins)||100)+' тиын және «Батырлар» скині сыйлыққа'+(r.gift&&r.gift.games?' · прогресің сақталды':''),null,7000);
+    }
   };
   d.append(f);
   openOv();ui.focus();
@@ -631,7 +636,7 @@ function init(){
   $('#acct').onclick=()=>me?profileView('profile'):authView('login');
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
-  window.Plat={pskin:()=>(me&&me.skins&&me.skins.piece)||'beast',skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
+  window.Plat={pskin:()=>(me&&me.skins&&me.skins.piece)||'beast',skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();

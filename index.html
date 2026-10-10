@@ -117,6 +117,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <button data-l="3" aria-pressed="true">Қиын</button>
   </div>
   <div class="pbar" id="pbTop" hidden></div>
+  <div class="gbar" id="gBar" hidden></div>
 
   <div class="stage" id="stage">
     <canvas id="cv" aria-label="Шөп төселген тақта, тірі шахмат фигуралары"></canvas>
@@ -124,6 +125,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="promo" id="promoBox" hidden role="dialog" aria-label="Пешка алмасуы"></div>
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
+      <div class="rcta" id="resCta" hidden></div>
       <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
     </div>
     <div class="rpanel" id="rpanel" hidden>
@@ -1104,7 +1106,36 @@ function showResult(){
   $('#resS').textContent=R[rs]||'';
   $('#result').hidden=false;
   $('#resFriend').hidden=!(net&&net.mode==='pvp'&&net.you&&PL().isIn());
+  guestEnd();
   snd('end',winner&&(!net||winner===net.you));
+}
+/* ---- guests: remember progress locally and invite them to register ---- */
+const gpGet=()=>{try{return JSON.parse(localStorage.getItem('gp')||'null')||{g:0,w:0,c:0}}catch(e){return {g:0,w:0,c:0}}};
+function guestBar(){
+  const bar=$('#gBar');if(!bar)return;
+  const g=gpGet(),guest=!PL().isIn();
+  bar.hidden=!(guest&&g.g>0);
+  if(bar.hidden)return;
+  bar.textContent='';
+  bar.append(el('span','','👤 Қонақ: '+g.g+' ойын · '+g.w+' жеңіс · тіркелсең сақталады'));
+  const b=el('button','btn sm','🎁 Сыйлық алу');b.type='button';b.onclick=()=>PL().register();bar.append(b);
+}
+function guestEnd(){
+  const cta=$('#resCta');if(!cta)return;
+  cta.hidden=true;cta.textContent='';
+  if(PL().isIn()||net||mode==='puz'||mode==='two')return;
+  if(mode==='ai'&&!stat.gDone){
+    stat.gDone=true;
+    const g=gpGet();g.g++;if(winner==='w')g.w++;g.c+=stat.caps||0;
+    try{localStorage.setItem('gp',JSON.stringify(g))}catch(e){}
+    guestBar();
+  }
+  const g=gpGet();
+  const win=winner==='w';
+  cta.append(el('b','',win?'🏆 Жеңісіңді сақта!':(g.g>=3?'🔥 '+g.g+' ойын ойнадың!':'💪 Келесі жеңіс сақталсын')));
+  cta.append(el('span','','Тіркел (тегін, 20 секунд): 🎁 100 тиын + «Батырлар» скині, прогресің ('+g.g+' ойын, '+g.w+' жеңіс) аккаунтыңа көшеді.'));
+  const b=el('button','btn','🎁 Тіркеліп сыйлық алу');b.type='button';b.onclick=()=>PL().register();cta.append(b);
+  cta.hidden=false;
 }
 function setHint(p){
   const h=$('#hint');h.textContent='';
@@ -1982,6 +2013,7 @@ async function startup(){
   refreshUI();
   const P=PL();
   await P.ready;
+  guestBar();P.onAuth(()=>guestBar());
   const qp=new URLSearchParams(location.search),jp=qp.get('join'),rid=qp.get('replay'),wid=qp.get('watch');
   let resumed=false;
   if(P.isIn()){
