@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
-import { startBoard, applyMove, gameStatus, pickMove, posKey } from '../engine.js';
+import { startBoard, applyMove, gameStatus, pickMove, posKey, evalB } from '../engine.js';
 
 const PC = 'QRBN';
 const enc = (m) => m.f | (m.t << 6) | (m.promo ? (PC.indexOf(m.promo) + 1 || 1) << 12 : 0);
@@ -49,6 +49,17 @@ function repeated3(moves) {
     seen.set(last, (seen.get(last) || 0) + 1);
   }
   return (seen.get(last) || 0) >= 3;
+}
+/* fifty-move rule: 100 plies with no capture and no pawn move (pawn layout + piece count unchanged) */
+const pawnSig = (b) => { let n = 0, s = ''; for (let i = 0; i < 64; i++) { const p = b[i]; if (p) { n++; if (p.t === 'P') s += i + p.c; } } return n + ':' + s; };
+function fifty(moves) {
+  if (moves.length < 100) return false;
+  let b = startBoard();
+  const sigs = [pawnSig(b)];
+  for (const c of moves) { b = applyMove(b, dec(c)); sigs.push(pawnSig(b)); }
+  const cur = sigs[sigs.length - 1];
+  for (let k = sigs.length - 101; k < sigs.length - 1; k++) if (sigs[k] !== cur) return false;
+  return true;
 }
 function sideStats(log, side) {
   const own = log.filter(x => x.side === side);
@@ -321,6 +332,16 @@ export default async function handler(req, res) {
       return send(res, 200, { match: await view(m2, uid), awards: f && f.awards[seat] || null });
     }
     if (b.action === 'draw_offer' || b.action === 'draw_accept' || b.action === 'draw_decline') {
+      if (m.mode === 'ai' && b.action === 'draw_offer' && m.moves.length >= 2) {
+        /* the bot (black) accepts only when it is not worse and the game has developed */
+        if (await limited(req, 'draw' + uid, 30, 300)) return send(res, 429, { error: 'Тым жиі' });
+        const ev = evalB(replay(m.moves).b);
+        if (m.moves.length >= 30 && ev <= 60) {
+          const f = await finish(m, null, 'agreed');
+          return send(res, 200, { match: await view(await load(m.id), uid), awards: f && f.awards[seat] || null });
+        }
+        return send(res, 200, { match: await view(m, uid), declined: true });
+      }
       if (m.mode !== 'pvp' || m.moves.length < 2) return send(res, 400, { error: 'Қазір ұсыну мүмкін емес' });
       if (await limited(req, 'draw' + uid, 30, 300)) return send(res, 429, { error: 'Тым жиі' });
       const opp = seat === 'w' ? 'b' : 'w';
@@ -367,6 +388,7 @@ export default async function handler(req, res) {
         }
       }
       if (!after.over && repeated3(moves)) after = { over: true, winner: null, reason: 'repetition' };
+      else if (!after.over && fifty(moves)) after = { over: true, winner: null, reason: 'fifty' };
       let clk = null;
       if (m.tc) {
         const c = clockNow(m), left = (seat === 'w' ? c.cw : c.cb) + (INC[m.tc] || 0) * 1000;
