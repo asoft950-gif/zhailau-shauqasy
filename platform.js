@@ -149,14 +149,16 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const home=el('button','btn ghost sm','🏠 Басты бет');home.onclick=closeOv;h.append(home);
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
-  const tb=el('div','tabs');tb.setAttribute('role','tablist');
   const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['pass','Жол'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг'],['set','Баптау']];if(me.role==='creator'||me.role==='moderator')tl.push(['adm','Админ']);
-  for(const [k,l] of tl){
-    const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
-  }
-  d.append(tb);
+  const GR=[['👤','Мен',['profile','ach','set']],['🎮','Ойын',['daily','pass','cup']],['🤝','Қоғам',['fr','clan','top']],['🛒','Дүкен',['shop']]];
+  if(tl.some(x=>x[0]==='adm'))GR.push(['🛡️','Админ',['adm']]);
+  const grp=GR.find(g=>g[2].includes(tab))||GR[0],names=Object.fromEntries(tl);
+  const tb=el('div','tabs gtabs');tb.setAttribute('role','tablist');
+  for(const g of GR){const bt=el('button','',g[0]+' '+g[1]);bt.setAttribute('role','tab');bt.setAttribute('aria-selected',g===grp);bt.onclick=()=>profileView(g[2][0]);tb.append(bt)}
+  const st=el('div','subtabs');
+  if(grp[2].length>1)for(const k of grp[2]){const bt=el('button','',names[k]);bt.setAttribute('aria-pressed',k===tab);bt.onclick=()=>profileView(k);st.append(bt)}
+  d.append(tb);if(st.childNodes.length)d.append(st);
   const body=el('div');d.append(body);
-  requestAnimationFrame(()=>{const s=tb.querySelector('[aria-selected="true"]');if(s)tb.scrollLeft=s.offsetLeft-tb.clientWidth/2+s.offsetWidth/2});
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
   else if(tab==='daily')renderDaily(body);

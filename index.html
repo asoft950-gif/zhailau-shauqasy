@@ -118,6 +118,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
       <button id="mPuz" aria-pressed="false">Жұмбақ</button>
     </div>
   </div>
+  <div class="opts">
   <div class="seg lvl" id="lvlSeg" role="group" aria-label="Бот деңгейі">
     <button data-l="1" aria-pressed="false">Жеңіл</button>
     <button data-l="2" aria-pressed="false">Орташа</button>
@@ -128,6 +129,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <button data-p="aggr" aria-pressed="false">🐺 Шабуылшы</button>
     <button data-p="def" aria-pressed="false">🐢 Қорғанушы</button>
     <button data-p="trick" aria-pressed="false">🦊 Қу</button>
+  </div>
   </div>
   <div class="pbar" id="pbTop" hidden></div>
   <div class="gbar" id="gBar" hidden></div>
@@ -179,6 +181,19 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 </main>
 <footer class="foot" id="foot"></footer>
 <div class="ov" id="ov" hidden><div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-label="Аккаунт"></div></div>
+<nav class="bnav" id="bnav" aria-label="Негізгі навигация">
+  <button type="button" data-go="mAi"><i>♟️</i><span>Ойын</span></button>
+  <button type="button" data-go="mNet"><i>🌐</i><span>Онлайн</span></button>
+  <button type="button" data-go="mCamp"><i>🏹</i><span>Жорық</span></button>
+  <button type="button" data-go="mPuz"><i>🧩</i><span>Жұмбақ</span></button>
+  <button type="button" data-go="acct"><i>👤</i><span>Профиль</span></button>
+</nav>
+<script>
+(()=>{const nav=document.getElementById('bnav');if(!nav)return;
+const sync=()=>{for(const b of nav.children){const t=document.getElementById(b.dataset.go);b.classList.toggle('on',!!t&&t.getAttribute('aria-pressed')==='true')}};
+nav.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const t=document.getElementById(b.dataset.go);if(t)t.click();if(b.dataset.go!=='acct')window.scrollTo({top:0,behavior:'smooth'});setTimeout(sync,50)});
+new MutationObserver(sync).observe(document.querySelector('.seg'),{attributes:true,subtree:true,attributeFilter:['aria-pressed']});sync()})();
+</script>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script src="platform.js" defer></script>
 
