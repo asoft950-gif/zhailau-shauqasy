@@ -575,37 +575,7 @@ function layout(){
 const off=document.createElement('canvas');
 
 /* ---------- sprites ---------- */
-const MAN={"camel":{"ortho":3.3,"ax":0.4198,"ay":0.794,"poses":["stand","step"]},"eagle":{"ortho":4.0,"ax":0.5,"ay":0.8005,"poses":["fold","half","spread","dive"]},"hare":{"ortho":2.0,"ax":0.4471,"ay":0.7807,"poses":["idle","attack"]},"horse":{"ortho":3.2,"ax":0.4448,"ay":0.8284,"poses":["stand","rear","jump"]},"king":{"ortho":3.4,"ax":0.4609,"ay":0.8336,"poses":["idle","windup","slash"]},"snake":{"ortho":3.0,"ax":0.4557,"ay":0.7659,"poses":["idle","strike","pull"]}};
-const CH={P:'hare',N:'horse',B:'snake',R:'camel',Q:'eagle',K:'king'};
-const KPX={P:.52,N:.45,B:.45,R:.43,Q:.44,K:.46};
-const SPR={};
-for(const t in CH)for(const c of['w','b'])for(const po of MAN[CH[t]]?MAN[CH[t]].poses:[]){
-  const im=new Image();im.src='assets/sprites/'+c+'_'+CH[t]+'_'+po+'.png';SPR[c+t+po]=im;
-}
-function poseOf(p){
-  switch(p.t){
-    case'P':return p.strike>.3?'attack':'idle';
-    case'N':return p.rear>.5?'rear':(p.moving&&p.z>.15?'jump':'stand');
-    case'B':return p.strike<-.2?'pull':(p.strike>.3?'strike':'idle');
-    case'R':return p.moving&&Math.sin(p.ph)>0?'step':'stand';
-    case'Q':return(p.strike>.6&&p.z>.4)?'dive':(p.wing<.25?'fold':(p.wing<.75?'half':'spread'));
-    case'K':return p.strike<-.4?'windup':(p.strike>.4?'slash':'idle');
-  }
-}
-function sprImg(c,t,po){const im=SPR[c+t+po];return im&&im.complete&&im.naturalWidth?im:null}
-function drawImg3(c,im,t,W){
-  const m=MAN[CH[t]];
-  c.drawImage(im,-m.ax*W,-m.ay*W,W,W);
-}
 function drawSprite(c,p,gx,gy,tm){
-  const im=sprImg(p.c,p.t,poseOf(p));
-  if(im){
-    c.save();c.translate(gx,gy);c.rotate(p.rot);
-    c.scale(p.face*p.sx,p.sy);c.rotate(p.lean);
-    const bob=p.moving?0:Math.sin(tm*2+p.id)*.006*T;
-    drawImg3(c,im,p.t,MAN[CH[p.t]].ortho*KPX[p.t]*T*(1+(p.moving?0:Math.sin(tm*2+p.id)*.01)));
-    c.restore();return;
-  }
   c.save();c.translate(gx,gy);
   c.rotate(p.rot);
   const s=T/100*SC[p.t];
@@ -640,7 +610,6 @@ function paintShadow(p){
   const zz=Math.max(0,p.z);
   ctx.fillStyle='rgba(10,28,4,'+(.32*(1-Math.min(.8,zz*.6))*Math.max(0,p.alpha))+')';
   ctx.beginPath();ctx.ellipse(gx,gy,T*.3*SHW[p.t]*(1-Math.min(.5,zz*.3)),T*.1,0,0,TAU);ctx.fill();
-  if(sprImg(p.c,p.t,'x'+poseOf(p))||SPR[p.c+p.t+poseOf(p)]){ctx.strokeStyle=p.c==='w'?'rgba(255,200,60,'+(.8*Math.max(0,p.alpha))+')':'rgba(110,140,255,'+(.8*Math.max(0,p.alpha))+')';ctx.lineWidth=2.5;ctx.beginPath();ctx.ellipse(gx,gy,T*.34*SHW[p.t]*(1-Math.min(.5,zz*.3)),T*.115,0,0,TAU);ctx.stroke()}
 }
 
 /* ---------- particles ---------- */
@@ -750,8 +719,6 @@ function drawIcon(cvs,t,c,tm){
   const d=Math.min(2,window.devicePixelRatio||1),sz=cvs.clientWidth||cvs.width/d||28;
   if(cvs.width!==Math.round(sz*d)){cvs.width=Math.round(sz*d);cvs.height=Math.round(sz*d)}
   const x=cvs.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,sz,sz);
-  const im=sprImg(c,t,CH[t]&&MAN[CH[t]]?MAN[CH[t]].poses[0]:'');
-  if(im){x.translate(sz/2,sz*.92);drawImg3(x,im,t,MAN[CH[t]].ortho*KPX[t]*sz*.95);return}
   x.translate(sz/2,sz*.9);
   const s=sz/100*SC[t]*.95;x.scale(s,s);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
