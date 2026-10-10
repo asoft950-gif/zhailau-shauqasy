@@ -132,7 +132,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
       <div class="rcta" id="resCta" hidden></div>
-      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
+      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn" id="resRe" type="button" hidden>🔁 Реванш</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
     </div>
     <div class="rpanel" id="rpanel" hidden>
       <div class="rpbtns"><button type="button" id="rpFirst" aria-label="Басына">⏮</button><button type="button" id="rpPrev" aria-label="Артқа">◀</button><button type="button" id="rpPlay" class="main" aria-label="Ойнату">▶</button><button type="button" id="rpNext" aria-label="Алға">▶︎|</button><button type="button" id="rpLast" aria-label="Соңына">⏭</button></div>
@@ -1347,6 +1347,8 @@ function refreshUI(){
   renderEmo();renderWatchInfo();
   $('#bUndo').hidden=!!net||mode==='net'||mode==='puz';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
+  {const rb=$('#resRe'),can=!!(net&&net.you&&net.mode==='pvp'&&!net.team&&net.status==='done'&&over&&PL().isIn());
+   rb.hidden=!can;if(can){const rm=net.rematch;rb.textContent=rm?(rm.byYou?'🔁 Реванш ұсынылды…':'🔁 Реванш қабылдау'):'🔁 Реванш';rb.disabled=!!(rm&&rm.byYou)}}
   {const pv=net&&net.you&&net.mode==='pvp'&&net.status==='active'&&!over&&net.moves.length>=2;
    const bd=$('#bDraw');bd.hidden=!pv;bd.disabled=!!pv&&net.draw===net.you;bd.textContent=pv&&net.draw===net.you?'🤝 Ұсыныс жіберілді…':'🤝 Тең ұсыну';
    $('#drawBox').hidden=!(pv&&net.draw&&net.draw!==net.you)}
@@ -1367,7 +1369,7 @@ setInterval(updateClaim,5000);
 const teamCount=n=>[n.white,n.white2,n.black,n.black2].filter(x=>x&&x.id).length;
 function adoptNet(m){
   clearTimeout(pollT);
-  net={draw:m.draw||null,team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
+  net={rematch:m.rematch||null,draw:m.draw||null,team:!!m.team,white2:m.white2,black2:m.black2,myTurn:!!m.myTurn,moverName:m.moverName||'',id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
   setClk(m);
   lastChange=Date.now();
 }
@@ -1387,7 +1389,7 @@ function netApply(m){
   if(!net||m.id!==net.id)return;
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
-  net.draw=m.draw||null;net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
+  net.rematch=m.rematch||null;net.draw=m.draw||null;net.team=!!m.team;net.white2=m.white2;net.black2=m.black2;net.myTurn=!!m.myTurn;net.moverName=m.moverName||'';net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
   setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
@@ -1446,7 +1448,10 @@ async function pollOnce(){
     }
     if(q.gap){n.gap=q.gap;const g=$('#gapTxt');if(g)g.textContent='Рейтинг айырмасы: ±'+q.gap+' (уақыт өткен сайын кеңейеді)'}
   }
-  if(n.status==='done'){if(!n.award&&n.moves.length>=8&&n.tries++<4)startPoll();return}
+  if(n.status==='done'){
+    if(!n.award&&n.moves.length>=8&&n.tries++<4){startPoll();return}
+    if(n.you&&!n.team&&Date.now()-(n.doneAt||(n.doneAt=Date.now()))<180000){clearTimeout(pollT);pollT=setTimeout(pollOnce,3000)}
+    return}
   startPoll();
 }
 async function netSend(mv){
@@ -1981,6 +1986,13 @@ $('#bResign').addEventListener('click',async e=>{
   else if(!r.ok)PL().toast('⚠️',r.error||'Қате');
 });
 const drawCall=async a=>{const n=net;if(!n)return;const r=await napi({action:a,id:n.id});if(net===n&&r.match){netApply(r.match);if(a==='draw_offer'&&r.match.status==='active')PL().toast('🤝','Тең ойын ұсынылды','Қарсылас жауап бергенше күт')}else PL().toast('⚠️',r.error||'Қате')};
+$('#resRe').addEventListener('click',async()=>{
+  const n=net;if(!n)return;
+  const r=await napi({action:'rematch',id:n.id});
+  if(!r.match){PL().toast('⚠️',r.error||'Қате');return}
+  $('#result').hidden=true;
+  openPvp(r.match,false);net.public=false;if(net.status==='open')showLobby('wait');
+});
 $('#bDraw').addEventListener('click',()=>drawCall('draw_offer'));
 $('#dYes').addEventListener('click',()=>drawCall('draw_accept'));
 $('#dNo').addEventListener('click',()=>drawCall('draw_decline'));

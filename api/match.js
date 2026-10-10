@@ -77,11 +77,16 @@ const watchersOf = async (id) => (await sql.query("SELECT count(*)::int AS n FRO
 async function view(m, uid) {
   const [w, b, w2, b2] = await Promise.all([who(m.white_id), who(m.black_id), m.team ? who(m.white2_id) : null, m.team ? who(m.black2_id) : null]);
   const you = sideOf(m, uid);
+  let rematch = null;
+  if (m.status === 'done' && m.rematch_id && !m.team) {
+    const nm = (await sql.query("SELECT id, status, white_id, black_id FROM matches WHERE id=$1", [m.rematch_id]))[0];
+    if (nm && nm.status === 'open') rematch = { id: nm.id, byYou: !!uid && (nm.white_id === uid || nm.black_id === uid) };
+  }
   const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating, skin: (u.skins && u.skins.piece) || 'beast' };
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
-    draw: m.draw_by || null, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
+    draw: m.draw_by || null, rematch, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
@@ -285,6 +290,28 @@ export default async function handler(req, res) {
     if (b.action === 'cancel') {
       if (m.status === 'open') await cancelOwnOpen(uid);
       return send(res, 200, { ok: true });
+    }
+    if (b.action === 'rematch') {
+      if (m.status !== 'done' || m.mode !== 'pvp' || m.team) return send(res, 400, { error: 'Реванш мүмкін емес' });
+      if (await limited(req, 'rematch' + uid, 20, 300)) return send(res, 429, { error: 'Тым жиі' });
+      let nm = m.rematch_id ? (await load(m.rematch_id)) : null;
+      if (nm && nm.status === 'open') {
+        if (nm.white_id === uid || nm.black_id === uid) return send(res, 200, { match: await view(nm, uid) });
+        const seatK = nm.white_id ? 'black_id' : 'white_id';
+        await cancelOwnOpen(uid);
+        const r = await sql.query(`UPDATE matches SET ${seatK}=$1, status='active', ver=ver+1, updated_at=now(), seen_w=now(), seen_b=now(), cw=tc*1000, cb=tc*1000, turn_at=now() WHERE id=$2 AND status='open' AND ${seatK} IS NULL RETURNING *`, [uid, nm.id]);
+        if (!r.length) return send(res, 409, { error: 'Реванш қол жетімсіз' });
+        return send(res, 200, { match: await view(r[0], uid) });
+      }
+      await cancelOwnOpen(uid);
+      const oppId = seat === 'w' ? m.black_id : m.white_id;
+      /* colours swap: whoever was white is black now */
+      const mineWhite = seat === 'b';
+      const r = await sql.query("INSERT INTO matches (code,mode,white_id,black_id,is_public,status,tc,invite_id) VALUES ($1,'pvp',$2,$3,false,'open',$4,$5) RETURNING *",
+        [newCode(), mineWhite ? uid : null, mineWhite ? null : uid, m.tc || 0, oppId]);
+      const u = await sql.query("UPDATE matches SET rematch_id=$1, ver=ver+1 WHERE id=$2 AND rematch_id IS NULL RETURNING id", [r[0].id, m.id]);
+      if (!u.length) { await sql.query("DELETE FROM matches WHERE id=$1", [r[0].id]); return send(res, 409, { error: 'Қарсылас бірінші ұсынды, қайта бас' }); }
+      return send(res, 200, { match: await view(r[0], uid) });
     }
     if (m.status !== 'active') return send(res, 200, { match: await view(m, uid) });
 
