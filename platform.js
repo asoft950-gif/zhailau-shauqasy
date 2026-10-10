@@ -154,7 +154,7 @@ async function profileView(t){
   if(tl.some(x=>x[0]==='adm'))GR.push(['🛡️','Админ',['adm']]);
   const grp=GR.find(g=>g[2].includes(tab))||GR[0],names=Object.fromEntries(tl);
   const tb=el('div','tabs gtabs');tb.setAttribute('role','tablist');
-  for(const g of GR){const bt=el('button','',g[0]+' '+g[1]);bt.setAttribute('role','tab');bt.setAttribute('aria-selected',g===grp);bt.onclick=()=>profileView(g[2][0]);tb.append(bt)}
+  for(const g of GR){const bt=el('button','');bt.append(el('i','',g[0]),el('span','',g[1]));bt.setAttribute('role','tab');bt.setAttribute('aria-selected',g===grp);bt.onclick=()=>profileView(g[2][0]);tb.append(bt)}
   const st=el('div','subtabs');
   if(grp[2].length>1)for(const k of grp[2]){const bt=el('button','',names[k]);bt.setAttribute('aria-pressed',k===tab);bt.onclick=()=>profileView(k);st.append(bt)}
   d.append(tb);if(st.childNodes.length)d.append(st);

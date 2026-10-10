@@ -128,3 +128,18 @@ html,body{overflow-x:hidden;max-width:100%}
 .app{grid-template-columns:minmax(0,1fr)}
 .col-main,.col-side{grid-template-columns:minmax(0,1fr)}
 .toast{max-width:min(420px,calc(100vw - 24px))!important;box-sizing:border-box;user-select:none;-webkit-user-select:none}
+
+/* ===== v4: profile dialog fits the screen ===== */
+.dlg{overflow-x:hidden;box-sizing:border-box}
+.dlg>*{min-width:0;max-width:100%}
+.gtabs{display:grid!important;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px!important;padding:3px!important;border-radius:16px!important;overflow:hidden!important}
+.gtabs button{display:grid!important;justify-items:center;gap:0;padding:6px 2px!important;min-height:52px;font-size:.72rem!important;line-height:1.15;border-radius:13px!important;min-width:0}
+.gtabs button i{font-style:normal;font-size:1.25rem;line-height:1.1}
+.gtabs button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subtabs{max-width:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch}.subtabs::-webkit-scrollbar{display:none}
+.subtabs button{font-size:.85rem!important;padding:6px 12px!important;min-height:36px!important}
+.dlg.big .tabs{top:-10px}
+.dh{gap:8px}.dh h2{flex:1;min-width:0}.dh .btn.sm{flex:none}
+.dlg table,.dlg .lbt{max-width:100%}
+.dlg .agrid,.dlg .stats{max-width:100%}
+.dlg textarea,.dlg select,.dlg input{box-sizing:border-box;max-width:100%}
