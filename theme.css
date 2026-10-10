@@ -192,3 +192,8 @@ body.finale .sky{filter:brightness(.7) saturate(1.2)}
 @keyframes efly{0%{opacity:0;transform:translateY(0) scale(.5)}15%{opacity:1;transform:translateY(-30px) scale(1.2)}100%{opacity:0;transform:translateY(-220px) scale(1)}}
 .lcard h4{margin:6px 0 0;font-size:.9rem}
 .lcard .live{font-size:.82rem;padding:8px 10px}
+
+/* scrollable tabs */
+.dlg .tabs,#dlg .tabs{overflow-x:auto;scrollbar-width:none}
+#dlg .tabs::-webkit-scrollbar{display:none}
+#dlg .tabs button{flex:0 0 auto;padding:9px 14px;white-space:nowrap}

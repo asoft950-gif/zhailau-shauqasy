@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     const ach = await sql.query('SELECT key, unlocked_at FROM achievements WHERE user_id=$1', [uid]);
     const hist = await sql.query('SELECT result, mode, side, moves, captures, lost, created_at FROM games WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [uid]);
     const daily = await dailyFor(uid);
-    send(res, 200, { daily, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
+    const medals = await sql.query('SELECT period_key, place FROM season_awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30', [uid]);
+    send(res, 200, { daily, medals, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
   } catch (e) { console.error(e); send(res, 500, { error: 'Сервер қатесі' }); }
 }

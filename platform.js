@@ -4,7 +4,7 @@ const $=s=>document.querySelector(s);
 const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e};
 const AV=['P','N','B','R','Q','K'];
 const AVN={P:'Қоян',N:'Жылқы',B:'Жылан',R:'Түйе',Q:'Бүркіт',K:'Батыр'};
-let me=null,data=null,tab='profile';
+let me=null,data=null,tab='profile',cupP='week';
 
 async function api(path,opt){
   try{
@@ -103,16 +103,18 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['daily','Тапсырма'],['shop','Дүкен'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
   d.append(tb);
   const body=el('div');d.append(body);
+  requestAnimationFrame(()=>{const s=tb.querySelector('[aria-selected="true"]');if(s)tb.scrollLeft=s.offsetLeft-tb.clientWidth/2+s.offsetWidth/2});
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
   else if(tab==='daily')renderDaily(body);
   else if(tab==='shop')renderShop(body);
+  else if(tab==='cup')await renderCup(body,cupP);
   else if(tab==='top')await renderTop(body);
   else await renderAdmin(body,'');
   openOv();
@@ -131,6 +133,7 @@ function renderProfile(b){
   const st=el('div','stats');
   st.append(stat(u.rating,'Рейтинг'),stat('#'+u.rank,'Орын'),stat(u.games,'Ойын'),stat(u.wins,'Жеңіс'),stat(u.losses,'Жеңіліс'),stat(u.draws,'Тең'),stat(u.captures,'Қағылған жау'),stat(u.streak,'Қатар жеңіс'),stat(u.best_streak,'Үздік қатар'));
   b.append(st);
+  if(data.medals&&data.medals.length){const c={1:0,2:0,3:0};data.medals.forEach(m=>c[m.place]++);b.append(el('p','xpt','🏅 Медальдар: 🥇'+c[1]+' 🥈'+c[2]+' 🥉'+c[3]))}
   // edit
   const ed=el('details');ed.style.margin='0 0 14px';
   const sm=el('summary','','Профильді өзгерту');sm.style.cssText='font-weight:800;cursor:pointer;min-height:44px;display:flex;align-items:center';ed.append(sm);
@@ -203,6 +206,26 @@ function renderShop(b){
     c.append(bt);g.append(c);
   }
   b.append(g);
+}
+async function renderCup(b,period){
+  const sg=el('div','seg');
+  for(const [k,l] of [['week','Апталық'],['month','Айлық маусым']]){const x=el('button','',l);x.setAttribute('aria-pressed',k===period);x.onclick=()=>{cupP=k;profileView('cup')};sg.append(x)}
+  b.append(sg);
+  const r=await api('tournament?period='+period);
+  if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
+  b.append(el('p','xpt',(period==='week'?'Апталық турнир':'Айлық маусым')+' · аяқталуына: '+left(r.endsAt)));
+  b.append(el('p','xpt','Тек адаммен ойындар: жеңіс +3, тең +1. Топ-3 сыйлық: 🥇'+r.prizes[0]+' 🥈'+r.prizes[1]+' 🥉'+r.prizes[2]+' 🪙 және медаль.'));
+  if(r.lastChamp)b.append(el('p','xpt','Өткен чемпион: 🏆 '+r.lastChamp.username));
+  if(r.me)b.append(el('p','coins','Сенің орның: #'+r.me.rank+' · '+r.me.points+' ұпай'));
+  else b.append(el('p','xpt','Әзірше ұпайың жоқ: «Онлайн» режимінде ойна.'));
+  if(!r.rows.length){b.append(el('p','xpt','Әзірше ешкім ұпай жинаған жоқ. Бірінші бол!'));return}
+  const t=el('table','lbt');
+  for(const u of r.rows){
+    const tr=el('tr',me&&u.name===me.username?'me':'');
+    const nm=el('td');const w=el('div','u');w.append(avatarCanvas(u.avatar),el('span','',u.name+(u.role==='creator'?' 👑':'')));nm.append(w);
+    tr.append(el('td','',['🥇','🥈','🥉'][u.rank-1]||String(u.rank)),nm,el('td','',u.wins+'/'+u.games),el('td','r',String(u.points)));t.append(tr);
+  }
+  b.append(t);
 }
 function renderAch(b){
   const got=new Set(data.achievements.map(a=>a.key));
