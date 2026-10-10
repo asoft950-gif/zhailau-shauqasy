@@ -538,25 +538,13 @@ function renderDaily(b){
 const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі'],meadow:['🌳','Корольдік шалғын']};
 function renderShop(b){
   b.append(el('p','coins','🪙 '+me.coins+' тиын'));
-  b.append(el('p','xpt','Тақта терілері'));
-  const own=new Set(me.skins.own),cur=me.skins.board;
+  b.append(el('p','xpt','Тақта және фигура терілері'));
   const g=el('div','agrid');
-  for(const k of Object.keys(data.shop)){
-    const price=data.shop[k],has=own.has(k),c=el('div','ach got skin'+(cur===k?' on':''));
-    c.append(el('div','ic',SKN[k][0]),el('b','',SKN[k][1]));
-    const bt=el('button','btn',cur===k?'Қолданылуда':has?'Таңдау':'🪙 '+price);
-    bt.disabled=cur===k||(!has&&me.coins<price);
-    bt.onclick=async()=>{
-      bt.disabled=true;
-      const r=await patchMe(has?{equip:k}:{buy:k});
-      if(r.error){toast('⚠️',r.error);bt.disabled=false;return}
-      if(!has)await patchMe({equip:k});
-      await refresh();fireAuth('skin');await profileView('shop');
-    };
-    c.append(bt);g.append(c);
+  for(const [ic,nm,ds] of [['🌳','Корольдік шалғын','Тірі тақта: шөп, гүл, жарық қоңыз'],['⚔️','Корольдік гвардия','Күміс және қызыл рыцарьлар']]){
+    const c=el('div','ach got skin on');c.append(el('div','ic',ic),el('b','',nm),el('span','',ds),el('button','btn','Қолданылуда'));c.lastChild.disabled=true;g.append(c);
   }
   b.append(g);
-  renderPieceShop(b);
+  b.append(el('p','xpt','Басқа терілер әзірше өшірулі.'));
 }
 async function renderCup(b,period){
   const sg=el('div','seg');
@@ -767,7 +755,7 @@ function init(){
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
   ready.then(r=>{const mt=/^#cab-(\w+)$/.exec(location.hash);if(mt&&r&&r.user)profileView(['profile','fr','clan','daily','shop','cup','ach','top','set','adm'].includes(mt[1])?mt[1]:'profile')});
-  window.Plat={pskin:()=>(me&&me.skins&&me.skins.piece)||'beast',skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
+  window.Plat={pskin:()=>'knights',skin:()=>'meadow',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();
