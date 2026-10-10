@@ -208,6 +208,10 @@ export function gameStatus(b, turn) {
   for (let i = 0; i < 64; i++) { const p = b[i]; if (p && p.t !== 'K') { onlyK = false; break; } }
   if (!moves.length) return { over: true, winner: checked ? opp(turn) : null, checked, moves, reason: checked ? 'mate' : 'stalemate' };
   if (onlyK) return { over: true, winner: null, checked, moves, reason: 'bare' };
+  /* king + a single minor piece against a bare king cannot force mate */
+  let minor = 0, others = 0;
+  for (let i = 0; i < 64; i++) { const p = b[i]; if (!p || p.t === 'K') continue; if (p.t === 'N' || p.t === 'B') minor++; else others++; }
+  if (!others && minor === 1) return { over: true, winner: null, checked, moves, reason: 'insuff' };
   return { over: false, winner: null, checked, moves, reason: '' };
 }
 /* post-game analysis: how much worse was the played move than the best one at ply k (centipawns, 3-ply search) */

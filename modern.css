@@ -126,3 +126,11 @@ canvas#cv{border-radius:20px!important;box-shadow:0 18px 40px -16px rgba(0,0,0,.
   .pbar .pn{font-size:.9rem}.pbar .pd{font-size:.72rem}
   .pbar{border-radius:14px!important}
 }
+/* tablet/desktop polish */
+@media(min-width:700px){.stage{max-width:640px;margin-inline:auto}.col-main>*:not(.stage){max-width:640px;margin-inline:auto;width:100%}}
+@media(min-width:900px){
+  .hero{position:static!important;margin:0!important;border:1px solid var(--line)!important;border-radius:16px!important;padding:10px 16px!important;backdrop-filter:none}
+  .col-main>*:not(.stage){margin-inline:0;max-width:none}.stage{margin-inline:0;max-width:none}
+  .cols{margin-top:4px}
+}
+.col-main>*,.col-side>*{box-sizing:border-box}

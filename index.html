@@ -1182,7 +1182,7 @@ function afterMove(silent){
 }
 function showResult(){
   if(rp||mode==='puz'){$('#result').hidden=true;return}
-  const R={fifty:'Тиіссіз 50 жүріс — тең ойын.',agreed:'Екі жақ келісіп тең ойнады.',repetition:'Бір позиция 3 рет қайталанды — тең ойын.',time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
+  const R={fifty:'Тиіссіз 50 жүріс — тең ойын.',agreed:'Екі жақ келісіп тең ойнады.',repetition:'Бір позиция 3 рет қайталанды — тең ойын.',time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.',insuff:'Мат жасауға күш жетпейді — тең ойын.'};
   let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
   const cw=campStage&&winner==='w'&&net&&net.you==='w';
@@ -1841,7 +1841,7 @@ async function loadLive(card){
   }
   if(rc.recent&&rc.recent.length){
     card.append(el('h4','','🎞 Соңғы ойындар'));
-    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең',repetition:'қайталану',agreed:'келісім',fifty:'50 жүріс'};
+    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең',insuff:'күш жетпейді',repetition:'қайталану',agreed:'келісім',fifty:'50 жүріс'};
     for(const g of rc.recent){
       const w=g.winner==='w'?'🏆 ':'',bl=g.winner==='b'?'🏆 ':'';
       const b=el('button','btn ghost live',w+g.wn+' ⚔ '+bl+g.bn+' · '+g.plies+' жүріс · '+(RN[g.reason]||g.reason));
