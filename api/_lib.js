@@ -84,6 +84,7 @@ export const ACH = {
   promo:       { name: 'Қоян — Бүркіт', desc: 'Қоянды бүркітке айналдыру', icon: '✨' },
   hunter_50:   { name: 'Аңшы', desc: 'Барлығы 50 жауды қағып алу', icon: '🎯' },
   creator:     { name: 'Жайлау жаратушысы', desc: 'Осы ойынның Создателі', icon: '🌄' },
+  pvp_win:     { name: 'Адамды жеңдің', desc: 'Онлайн ойында шын ойыншыны жеңу', icon: '🌐' },
   rating_1200: { name: 'Шебер', desc: 'Рейтинг 1200-ге жету', icon: '⭐' }
 };
 export function earned(u, g, had) {
@@ -101,7 +102,37 @@ export function earned(u, g, had) {
   add('hare_kill', bp.P > 0); add('horse_kill', bp.N > 0); add('camel_kill', bp.R > 0);
   add('snake_kill', bp.B > 0); add('eagle_kill', bp.Q > 0); add('king_kill', bp.K > 0);
   add('promo', g.promos > 0);
+  add('pvp_win', win && g.mode === 'pvp');
   add('hunter_50', u.captures >= 50);
   add('rating_1200', u.rating >= 1200);
   return out;
+}
+
+/* ---------- result bookkeeping (rating, xp, streak, achievements) ---------- */
+export const AI_RATING = { 1: 800, 2: 1000, 3: 1200 };
+export async function applyResult(uid, g, oppRating) {
+  const u = (await sql.query('SELECT * FROM users WHERE id=$1', [uid]))[0];
+  if (!u || u.banned) return null;
+  const win = g.result === 'win', draw = g.result === 'draw';
+  const score = win ? 1 : draw ? .5 : 0;
+  const exp = 1 / (1 + Math.pow(10, (oppRating - u.rating) / 400));
+  const dRating = Math.round(24 * (score - exp));
+  const dXp = (win ? 30 : draw ? 15 : 8) + g.captures * 2 + (g.mode === 'pvp' ? 10 : 0);
+  const streak = win ? u.streak + 1 : 0;
+  const nu = {
+    games: u.games + 1, wins: u.wins + (win ? 1 : 0), losses: u.losses + (g.result === 'loss' ? 1 : 0), draws: u.draws + (draw ? 1 : 0),
+    captures: u.captures + g.captures, streak, best_streak: Math.max(u.best_streak, streak),
+    rating: Math.max(100, u.rating + dRating), xp: u.xp + dXp
+  };
+  const had = new Set((await sql.query('SELECT key FROM achievements WHERE user_id=$1', [uid])).map(r => r.key));
+  const newKeys = earned(nu, g, had);
+  const q = [
+    sql.query('UPDATE users SET games=$1,wins=$2,losses=$3,draws=$4,captures=$5,streak=$6,best_streak=$7,rating=$8,xp=$9 WHERE id=$10',
+      [nu.games, nu.wins, nu.losses, nu.draws, nu.captures, nu.streak, nu.best_streak, nu.rating, nu.xp, uid]),
+    sql.query('INSERT INTO games (user_id,result,mode,side,moves,captures,lost,by_piece) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [uid, g.result, g.mode, g.side, g.moves, g.captures, g.lost, JSON.stringify(g.by_piece)])
+  ];
+  for (const k of newKeys) q.push(sql.query('INSERT INTO achievements (user_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [uid, k]));
+  await Promise.all(q);
+  return { dRating, dXp, rating: nu.rating, xp: nu.xp, level: levelOf(nu.xp), levelUp: levelOf(nu.xp) > levelOf(u.xp), newAchievements: newKeys };
 }

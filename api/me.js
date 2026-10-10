@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     if (!u || u.banned) return send(res, 200, { user: null });
     if (u.role === 'creator') await sql.query("INSERT INTO achievements (user_id,key) VALUES ($1,'creator') ON CONFLICT DO NOTHING", [uid]);
     const ach = await sql.query('SELECT key, unlocked_at FROM achievements WHERE user_id=$1', [uid]);
-    const hist = await sql.query('SELECT result, side, moves, captures, lost, created_at FROM games WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [uid]);
+    const hist = await sql.query('SELECT result, mode, side, moves, captures, lost, created_at FROM games WHERE user_id=$1 ORDER BY created_at DESC LIMIT 10', [uid]);
     send(res, 200, { user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
   } catch (e) { console.error(e); send(res, 500, { error: 'Сервер қатесі' }); }
 }

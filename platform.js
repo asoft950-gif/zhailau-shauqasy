@@ -86,7 +86,7 @@ function authView(mode){
     const r=await api(mode==='login'?'login':'register',{method:'POST',body:{username:ui.value,password:pi.value,avatar:av}});
     sb.disabled=false;
     if(!r.ok){er.textContent=r.error||'Қате';return}
-    await refresh();closeOv();
+    await refresh();closeOv();fireAuth('in');
     toast('👋',mode==='login'?'Қош келдің, '+me.username+'!':'Тіркелдің, '+me.username+'!','Ботқа қарсы ойнап, жетістік жина');
   };
   d.append(f);
@@ -147,12 +147,12 @@ function renderProfile(b){
   for(const g of data.history){
     const li=el('li');
     const rl={win:'Жеңіс',loss:'Жеңіліс',draw:'Тең'}[g.result];
-    li.append(el('span',g.result,rl),el('span','',g.moves+' жүріс · '+g.captures+' жау · '+new Date(g.created_at).toLocaleDateString('kk-KZ')));
+    li.append(el('span',g.result,rl+' · '+(g.mode==='pvp'?'онлайн':'бот')),el('span','',g.moves+' жүріс · '+g.captures+' жау · '+new Date(g.created_at).toLocaleDateString('kk-KZ')));
     ul.append(li);
   }
   b.append(ul);
   const lo=el('button','btn ghost wide','Шығу');lo.style.marginTop='16px';
-  lo.onclick=async()=>{await api('logout',{method:'POST',body:{}});me=null;data=null;renderBtn();closeOv();toast('👋','Сау бол!')};
+  lo.onclick=async()=>{await api('logout',{method:'POST',body:{}});me=null;data=null;renderBtn();closeOv();fireAuth('out');toast('👋','Сау бол!')};
   b.append(lo);
 }
 function renderAch(b){
@@ -212,34 +212,26 @@ async function renderAdmin(b,q){
   b.append(ul);
 }
 
-/* ---------- game hook ---------- */
-async function report(p){
-  if(!me){
-    toast('🏅','Жетістіктер мен рейтинг жиналмады','Кіріп алсаң, нәтиже сақталады',{label:'Кіру',fn:()=>authView('login')},7000);
-    return;
-  }
-  const r=await api('game',{method:'POST',body:p});
-  if(!r.ok){toast('⚠️',r.error||'Нәтиже сақталмады');return}
+/* ---------- game hooks ---------- */
+const authCbs=[];
+function fireAuth(st){for(const c of authCbs.slice()){try{c.fn(st)}catch(e){}if(c.once&&st==='in')authCbs.splice(authCbs.indexOf(c),1)}}
+function showAward(r,result){
   const sign=r.dRating>=0?'+':'';
-  toast(p.result==='win'?'🏆':p.result==='draw'?'🤝':'💪','+'+r.dXp+' XP · рейтинг '+sign+r.dRating,'Рейтинг: '+r.rating+(r.levelUp?' · Жаңа деңгей!':''));
+  toast(result==='win'?'🏆':result==='draw'?'🤝':'💪','+'+r.dXp+' XP · рейтинг '+sign+r.dRating,'Рейтинг: '+r.rating+(r.levelUp?' · Жаңа деңгей!':''));
   let delay=900;
-  for(const k of r.newAchievements){
+  for(const k of (r.newAchievements||[])){
     const a=(data&&data.catalog&&data.catalog[k])||null;
-    setTimeout(()=>{ if(a)toast(a.icon,'Жетістік: '+a.name,a.desc,null,5500) },delay);delay+=1100;
+    setTimeout(()=>{ if(a){toast(a.icon,'Жетістік: '+a.name,a.desc,null,5500);window.__snd&&window.__snd('chime')} },delay);delay+=1100;
   }
   refresh();
-  fetch('/api/leaderboard').then(r=>r.json()).then(j=>{
-    const f=$('#foot');if(!f||!j.creators||!j.creators.length)return;
-    f.textContent='Создатель: ';const b=el('b','','👑 '+j.creators.join(', '));f.append(b);
-  }).catch(()=>{});
 }
 
 /* ---------- init ---------- */
 function init(){
   $('#acct').onclick=()=>me?profileView('profile'):authView('login');
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
-  window.Plat={report,isIn:()=>!!me,refresh};
-  refresh();
+  const ready=refresh();
+  window.Plat={api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();

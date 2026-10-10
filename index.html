@@ -74,7 +74,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
   <header>
     <div class="top">
       <h1>Жайлау Шайқасы</h1>
-      <button class="acct out" id="acct" type="button">Кіру / Тіркелу</button>
+      <div class="topr"><button class="sndb" id="sndBtn" type="button" aria-pressed="true" aria-label="Дыбысты өшіру">🔊</button><button class="acct out" id="acct" type="button">Кіру / Тіркелу</button></div>
     </div>
     <p class="sub">Шахмат ережесі сол, бірақ фигуралар тірі. Әрқайсысы өз қабілетімен жүреді және жауын өз тәсілімен құлатады.</p>
   </header>
@@ -82,24 +82,35 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
   <div class="bar">
     <div class="turn" role="status" aria-live="polite"><span class="dot" id="dot"></span><span id="turnText">Күн жағының жүрісі</span></div>
     <div class="seg" role="group" aria-label="Ойын түрі">
-      <button id="mAi" aria-pressed="true">Ботқа қарсы</button>
-      <button id="mTwo" aria-pressed="false">Екі ойыншы</button>
+      <button id="mAi" aria-pressed="true">Бот</button>
+      <button id="mNet" aria-pressed="false">Онлайн</button>
+      <button id="mTwo" aria-pressed="false">Екеуміз</button>
     </div>
   </div>
+  <div class="seg lvl" id="lvlSeg" role="group" aria-label="Бот деңгейі">
+    <button data-l="1" aria-pressed="false">Жеңіл</button>
+    <button data-l="2" aria-pressed="false">Орташа</button>
+    <button data-l="3" aria-pressed="true">Қиын</button>
+  </div>
+  <div class="pbar" id="pbTop" hidden></div>
 
   <div class="stage" id="stage">
     <canvas id="cv" aria-label="Шөп төселген тақта, тірі шахмат фигуралары"></canvas>
+    <div class="lobby" id="lobby" hidden></div>
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
       <button class="btn" id="resBtn">Қайта ойнау</button>
     </div>
   </div>
 
+  <div class="pbar" id="pbBot" hidden></div>
   <p class="hint" id="hint"></p>
 
   <div class="controls">
     <button class="btn" id="bNew">Жаңа ойын</button>
     <button class="btn ghost" id="bUndo">Артқа қайту</button>
+    <button class="btn ghost" id="bResign" hidden>Берілу</button>
+    <button class="btn ghost" id="bClaim" hidden>Қарсылас жоқ: жеңісті талап ету</button>
   </div>
 
   <section class="lost" aria-label="Құлаған фигуралар">
@@ -117,168 +128,11 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <script src="platform.js" defer></script>
 
-<script>
-// ===ENGINE_START===
-const N_D=[[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
-const K_D=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-const B_D=[[1,1],[1,-1],[-1,1],[-1,-1]];
-const R_D=[[1,0],[-1,0],[0,1],[0,-1]];
-const VAL={P:100,N:320,B:330,R:500,Q:900,K:0};
-function inb(r,c){return r>=0&&r<8&&c>=0&&c<8}
-function opp(c){return c==='w'?'b':'w'}
-function pseudo(b,i,out){
-  const p=b[i],r=i>>3,c=i&7,col=p.c;
-  const add=(to,promo)=>out.push({f:i,t:to,promo:!!promo});
-  if(p.t==='P'){
-    const d=col==='w'?-1:1,st=col==='w'?6:1,last=col==='w'?0:7,r1=r+d;
-    if(inb(r1,c)&&!b[r1*8+c]){
-      add(r1*8+c,r1===last);
-      if(r===st&&!b[(r+2*d)*8+c])add((r+2*d)*8+c,false);
-    }
-    for(const dc of [-1,1]){
-      const cc=c+dc;
-      if(inb(r1,cc)){const q=b[r1*8+cc];if(q&&q.c!==col)add(r1*8+cc,r1===last)}
-    }
-  }else if(p.t==='N'||p.t==='K'){
-    const D=p.t==='N'?N_D:K_D;
-    for(const [dr,dc] of D){
-      const rr=r+dr,cc=c+dc;
-      if(!inb(rr,cc))continue;
-      const q=b[rr*8+cc];
-      if(!q||q.c!==col)add(rr*8+cc);
-    }
-  }else{
-    const D=p.t==='B'?B_D:p.t==='R'?R_D:K_D;
-    for(const [dr,dc] of D){
-      let rr=r+dr,cc=c+dc;
-      while(inb(rr,cc)){
-        const q=b[rr*8+cc];
-        if(!q)add(rr*8+cc);
-        else{if(q.c!==col)add(rr*8+cc);break}
-        rr+=dr;cc+=dc;
-      }
-    }
-  }
-}
-function applyMove(b,m){
-  const n=b.slice(),p=n[m.f];
-  n[m.f]=null;
-  n[m.t]=m.promo?{t:'Q',c:p.c,id:p.id}:p;
-  return n;
-}
-function attacked(b,sq,by){
-  const r=sq>>3,c=sq&7;
-  const pr=by==='w'?r+1:r-1;
-  for(const dc of [-1,1]){
-    if(inb(pr,c+dc)){const q=b[pr*8+c+dc];if(q&&q.c===by&&q.t==='P')return true}
-  }
-  for(const [dr,dc] of N_D){
-    if(inb(r+dr,c+dc)){const q=b[(r+dr)*8+c+dc];if(q&&q.c===by&&q.t==='N')return true}
-  }
-  for(const [dr,dc] of K_D){
-    if(inb(r+dr,c+dc)){const q=b[(r+dr)*8+c+dc];if(q&&q.c===by&&q.t==='K')return true}
-  }
-  for(const [dr,dc] of R_D){
-    let rr=r+dr,cc=c+dc;
-    while(inb(rr,cc)){
-      const q=b[rr*8+cc];
-      if(q){if(q.c===by&&(q.t==='R'||q.t==='Q'))return true;break}
-      rr+=dr;cc+=dc;
-    }
-  }
-  for(const [dr,dc] of B_D){
-    let rr=r+dr,cc=c+dc;
-    while(inb(rr,cc)){
-      const q=b[rr*8+cc];
-      if(q){if(q.c===by&&(q.t==='B'||q.t==='Q'))return true;break}
-      rr+=dr;cc+=dc;
-    }
-  }
-  return false;
-}
-function kingSq(b,col){
-  for(let i=0;i<64;i++){const p=b[i];if(p&&p.t==='K'&&p.c===col)return i}
-  return -1;
-}
-function inChk(b,col){
-  const k=kingSq(b,col);
-  return k>=0&&attacked(b,k,opp(col));
-}
-function legal(b,col){
-  const ps=[],out=[];
-  for(let i=0;i<64;i++){const p=b[i];if(p&&p.c===col)pseudo(b,i,ps)}
-  for(const m of ps){
-    const n=applyMove(b,m);
-    if(!inChk(n,col))out.push(m);
-  }
-  return out;
-}
-function evalB(b){
-  let s=0;
-  for(let i=0;i<64;i++){
-    const p=b[i];
-    if(!p)continue;
-    const r=i>>3,c=i&7;
-    let v=VAL[p.t];
-    const cd=3.5-Math.abs(c-3.5),rd=3.5-Math.abs(r-3.5);
-    if(p.t==='P'){const prog=p.c==='w'?6-r:r-1;v+=prog*9+cd*2}
-    else if(p.t==='N'||p.t==='B')v+=(cd+rd)*5;
-    else if(p.t==='Q')v+=(cd+rd)*1.5;
-    else if(p.t==='K'){const home=p.c==='w'?7-r:r;v-=home*6}
-    s+=p.c==='w'?v:-v;
-  }
-  return s;
-}
-function orderMoves(b,ms){
-  const sc=m=>{
-    const t=b[m.t],a=b[m.f];
-    return (t?10*VAL[t.t]-VAL[a.t]:0)+(m.promo?800:0);
-  };
-  ms.sort((x,y)=>sc(y)-sc(x));
-}
-function qs(b,alpha,beta,col,qd){
-  const stand=(col==='w'?1:-1)*evalB(b);
-  if(stand>=beta)return beta;
-  if(stand>alpha)alpha=stand;
-  if(qd>=4)return alpha;
-  const caps=legal(b,col).filter(m=>b[m.t]);
-  orderMoves(b,caps);
-  for(const m of caps){
-    const sc=-qs(applyMove(b,m),-beta,-alpha,opp(col),qd+1);
-    if(sc>=beta)return beta;
-    if(sc>alpha)alpha=sc;
-  }
-  return alpha;
-}
-function nega(b,d,alpha,beta,col,ply){
-  if(d===0)return qs(b,alpha,beta,col,0);
-  const ms=legal(b,col);
-  if(!ms.length)return inChk(b,col)?-30000+ply:0;
-  orderMoves(b,ms);
-  for(const m of ms){
-    const sc=-nega(applyMove(b,m),d-1,-beta,-alpha,opp(col),ply+1);
-    if(sc>=beta)return beta;
-    if(sc>alpha)alpha=sc;
-  }
-  return alpha;
-}
-function bestMove(b,col,depth){
-  const ms=legal(b,col);
-  if(!ms.length)return null;
-  for(let i=ms.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ms[i],ms[j]]=[ms[j],ms[i]]}
-  orderMoves(b,ms);
-  let best=ms[0],alpha=-Infinity;
-  for(const m of ms){
-    const sc=-nega(applyMove(b,m),depth-1,-Infinity,-alpha,opp(col),1);
-    if(sc>alpha){alpha=sc;best=m}
-  }
-  return best;
-}
-// ===ENGINE_END===
+<script type="module">
+import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard} from './engine.js';
 
 (()=>{
 'use strict';
-const SRC=document.currentScript.textContent;
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
     r=Math.min(r,w/2,h/2);
@@ -666,6 +520,10 @@ const DRAW={
 const cv=$('#cv'),ctx=cv.getContext('2d');
 const stage=$('#stage');
 let S=360,T=40,pad=16,dpr=1,bg=document.createElement('canvas');
+let flip=false;const fx=x=>flip?7-x:x;
+let net=null,lvl=3;
+try{lvl=+localStorage.getItem('lvl')||3}catch(e){}
+if(![1,2,3].includes(lvl))lvl=3;
 let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
 let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
@@ -731,8 +589,8 @@ function buildBoard(){
   c.strokeStyle='rgba(0,0,0,.35)';c.lineWidth=2;c.strokeRect(pad,pad,T*8,T*8);
   c.fillStyle='rgba(255,240,210,.78)';c.font='800 '+Math.max(9,pad*.5)+'px Nunito, sans-serif';c.textAlign='center';c.textBaseline='middle';
   for(let i=0;i<8;i++){
-    c.fillText('abcdefgh'[i],pad+(i+.5)*T,S-pad*.5);
-    c.fillText(String(8-i),pad*.5,pad+(i+.5)*T);
+    c.fillText('abcdefgh'[flip?7-i:i],pad+(i+.5)*T,S-pad*.5);
+    c.fillText(String(flip?i+1:8-i),pad*.5,pad+(i+.5)*T);
   }
 }
 function layout(){
@@ -766,16 +624,16 @@ function bake(t,col){
 }
 function drawSprite(c,p,gx,gy,tm){
   if(!p.strike&&!p.rear&&!p.wing&&!p.moving&&p.mood==='idle'){
-    c.save();c.translate(gx,gy);c.rotate(p.rot);
-    c.scale(p.face*p.sx,p.sy*(1+Math.sin(tm*2.4+p.id)*.008));
+    c.save();c.translate(gx,gy);c.rotate(flip?-p.rot:p.rot);
+    c.scale((flip?-p.face:p.face)*p.sx,p.sy*(1+Math.sin(tm*2.4+p.id)*.008));
     c.rotate(p.lean);
     c.drawImage(bake(p.t,p.c),-T*BAX,-T*BAY,T*BW,T*BH);
     c.restore();return;
   }
   c.save();c.translate(gx,gy);
-  c.rotate(p.rot);
+  c.rotate(flip?-p.rot:p.rot);
   const s=T/100*SC[p.t];
-  c.scale(p.face*p.sx*s,p.sy*s);
+  c.scale((flip?-p.face:p.face)*p.sx*s,p.sy*s);
   c.rotate(p.lean);
   c.lineJoin='round';c.lineCap='round';c.lineWidth=3;
   odata.t=tm+p.id*.37;odata.id=p.id;odata.ph=p.ph;odata.moving=p.moving;odata.strike=p.strike;odata.rear=p.rear;odata.wing=p.wing;odata.mood=p.mood;
@@ -786,7 +644,7 @@ function drawSprite(c,p,gx,gy,tm){
 function paintPiece(p,idx){
   let z=p.z;
   if(idx===sel&&!busy&&!REDUCE)z+=.05+.05*Math.abs(Math.sin(time*6));
-  const gx=pad+(p.px+.5)*T,gy=pad+(p.py+.5)*T+T*.32-z*T;
+  const gx=pad+(fx(p.px)+.5)*T,gy=pad+(fx(p.py)+.5)*T+T*.32-z*T;
   if(p.alpha<=0.01)return;
   ctx.save();ctx.globalAlpha=Math.max(0,Math.min(1,p.alpha));
   if(p.tint>0||p.flash>0){
@@ -802,7 +660,7 @@ function paintPiece(p,idx){
   ctx.restore();
 }
 function paintShadow(p){
-  const gx=pad+(p.px+.5)*T,gy=pad+(p.py+.5)*T+T*.34;
+  const gx=pad+(fx(p.px)+.5)*T,gy=pad+(fx(p.py)+.5)*T+T*.34;
   const zz=Math.max(0,p.z);
   ctx.fillStyle='rgba(10,28,4,'+(.32*(1-Math.min(.8,zz*.6))*Math.max(0,p.alpha))+')';
   ctx.beginPath();ctx.ellipse(gx,gy,T*.3*SHW[p.t]*(1-Math.min(.5,zz*.3)),T*.1,0,0,TAU);ctx.fill();
@@ -834,7 +692,7 @@ function updParts(dt){
 function paintParts(){
   for(const q of parts){
     const a=Math.max(0,q.life/q.max);
-    const px=pad+(q.x+.5)*T,py=pad+(q.y+.5)*T+T*.32-q.z*T;
+    const px=pad+(fx(q.x)+.5)*T,py=pad+(fx(q.y)+.5)*T+T*.32-q.z*T;
     ctx.save();ctx.translate(px,py);
     switch(q.k){
       case 'dust':ctx.globalAlpha=a*.55;ctx.fillStyle=q.col||'#d8c9a3';ctx.beginPath();ctx.arc(0,0,q.size*T*(1+(1-a)*1.6),0,TAU);ctx.fill();break;
@@ -859,19 +717,19 @@ function paintParts(){
 
 /* ---------- highlights ---------- */
 function paintHighlights(){
-  const sq=(i,fill)=>{ctx.fillStyle=fill;ctx.fillRect(pad+(i&7)*T,pad+(i>>3)*T,T,T)};
+  const sq=(i,fill)=>{ctx.fillStyle=fill;ctx.fillRect(pad+fx(i&7)*T,pad+fx(i>>3)*T,T,T)};
   if(last){sq(last.f,'rgba(255,236,120,.26)');sq(last.t,'rgba(255,236,120,.34)')}
   if(checked&&!over){const k=kingSq(board,turn);if(k>=0){
-    const x=pad+((k&7)+.5)*T,y=pad+((k>>3)+.5)*T,g=ctx.createRadialGradient(x,y,T*.1,x,y,T*.6);
+    const x=pad+(fx(k&7)+.5)*T,y=pad+(fx(k>>3)+.5)*T,g=ctx.createRadialGradient(x,y,T*.1,x,y,T*.6);
     const a=.45+.2*Math.sin(time*7);g.addColorStop(0,'rgba(255,60,40,'+a+')');g.addColorStop(1,'rgba(255,60,40,0)');
     ctx.fillStyle=g;ctx.fillRect(x-T*.6,y-T*.6,T*1.2,T*1.2);
   }}
   if(sel>=0){
     sq(sel,'rgba(255,213,74,.34)');
-    ctx.strokeStyle='#FFD54A';ctx.lineWidth=3;ctx.strokeRect(pad+(sel&7)*T+1.5,pad+(sel>>3)*T+1.5,T-3,T-3);
+    ctx.strokeStyle='#FFD54A';ctx.lineWidth=3;ctx.strokeRect(pad+fx(sel&7)*T+1.5,pad+fx(sel>>3)*T+1.5,T-3,T-3);
   }
   for(const m of selMoves){
-    const x=pad+((m.t&7)+.5)*T,y=pad+((m.t>>3)+.5)*T;
+    const x=pad+(fx(m.t&7)+.5)*T,y=pad+(fx(m.t>>3)+.5)*T;
     if(board[m.t]){
       const pu=.5+.5*Math.sin(time*7);
       sq(m.t,'rgba(230,60,40,'+(.16+.1*pu)+')');
@@ -902,7 +760,7 @@ function frame(now){
   const list=[];
   for(let i=0;i<64;i++)if(board[i])list.push([board[i],i]);
   for(const [p] of list)paintShadow(p);
-  list.sort((a,b)=>(a[0].py+(a[0].z>.2?3:0))-(b[0].py+(b[0].z>.2?3:0)));
+  list.sort((a,b)=>(fx(a[0].py)+(a[0].z>.2?3:0))-(fx(b[0].py)+(b[0].z>.2?3:0)));
   for(const [p,i] of list)paintPiece(p,i);
   updParts(dt);paintParts();
   ctx.restore();
@@ -951,23 +809,27 @@ async function travel(p,tx,ty){
     for(let h=0;h<hops;h++){
       const a=h/hops,b=(h+1)/hops;
       await tw(280,(e,u)=>{set(a+(b-a)*u);p.z=.32*Math.sin(Math.PI*u);p.sy=1+.12*Math.sin(Math.PI*u);p.sx=1-.06*Math.sin(Math.PI*u)},EA.lin);
-      p.z=0;p.sx=1;p.sy=1;puff(p.px,p.py,2,undefined,.07);
+      p.z=0;p.sx=1;p.sy=1;puff(p.px,p.py,2,undefined,.07);snd('hop');
       await tw(70,e=>{p.sy=1-.16*Math.sin(Math.PI*e)},EA.lin);
     }
   }else if(p.t==='K'){
+    snd('walk');
     await tw(380*dist+60,(e,u)=>{set(e);p.ph=u*dist*7;p.z=.035*Math.abs(Math.sin(u*dist*Math.PI*2))},EA.io);
   }else if(p.t==='N'){
+    snd('gallop');
     await tw(120,e=>{p.sy=1-.12*e},EA.out);
     await tw(520,(e,u)=>{set(u);p.z=.6*Math.sin(Math.PI*u);p.sy=1-.12*(1-Math.min(1,u*4));p.rear=.4*Math.sin(Math.PI*u);p.ph=u*10},EA.lin);
     p.sy=1;p.rear=0;puff(p.px,p.py,5);shake=Math.max(shake,.25);
   }else if(p.t==='R'){
-    p.lean=.05;
+    p.lean=.05;snd('walk');
     await tw(170+190*dist,(e,u)=>{set(e);p.ph=u*dist*9;p.z=.015*Math.abs(Math.sin(u*dist*Math.PI*3))},EA.io);
     p.lean=0;puff(p.px,p.py,3);
   }else if(p.t==='B'){
+    snd('slither');
     await tw(200+170*dist,(e,u)=>{const w=.1*Math.sin(u*dist*Math.PI*3)*Math.sin(Math.PI*u);p.px=x0+dx*e+nx*w;p.py=y0+dy*e+ny*w;p.strike=.18*Math.sin(u*dist*14)},EA.io);
     p.strike=0;
   }else{
+    snd('flap');
     await tw(380+120*dist,(e,u)=>{set(e);p.z=.75*Math.min(1,u*4,(1-u)*4);p.wing=.45+.55*Math.sin(u*(10+dist*5))},EA.io);
     p.z=0;p.wing=0;puff(p.px,p.py,4,undefined,.08);
   }
@@ -995,14 +857,14 @@ async function capture(a,v,m){
     const sx0=a.px,sy0=a.py;
     await tw(380,(e,u)=>{a.px=lerp(sx0,vx,u);a.py=lerp(sy0,vy,u);a.z=.7*Math.sin(Math.PI*u);a.sy=1+.15*Math.sin(Math.PI*u);a.sx=1;a.rot=-.3*Math.sin(Math.PI*u)*a.face},EA.lin);
     a.z=0;a.sy=1;a.rot=0;a.px=vx;a.py=vy;
-    v.mood='dead';shake=.6;pop(vx,vy,'ТАҚ!');puff(vx,vy,7);stars(vx,vy,.5,5);
+    v.mood='dead';shake=.6;pop(vx,vy,'ТАҚ!');snd('hitP');puff(vx,vy,7);stars(vx,vy,.5,5);
     await tw(100,e=>{v.sy=1-.65*e;v.sx=1+.35*e},EA.out);
     await Promise.all([tw(260,(e,u)=>{a.z=.22*Math.sin(Math.PI*u)},EA.lin),tw(560,e=>{v.alpha=1-e;v.sy=.35-.3*e},EA.inn)]);
   }else if(a.t==='N'){
     await tw(300,e=>{a.rear=e},EA.out);
     await wait(60);
     await tw(110,e=>{a.rear=1-e},EA.inn);
-    v.mood='dead';v.flash=1;shake=1;pop(vx,vy,'ТЕП!');puff(vx,vy,7);ring(vx,vy);leaves(vx,vy,8);stars(vx,vy,.5,4);
+    v.mood='dead';v.flash=1;shake=1;pop(vx,vy,'ТЕП!');snd('kick');puff(vx,vy,7);ring(vx,vy);leaves(vx,vy,8);stars(vx,vy,.5,4);
     const kx=vx+ux*1.8,ky=vy+uy*1.8,sp=(ux>=0?1:-1)*7;
     await tw(780,(e,u)=>{v.px=lerp(vx,kx,e);v.py=lerp(vy,ky,e);v.z=1.2*Math.sin(Math.PI*u);v.rot=u*sp;v.flash=Math.max(0,1-u*4);v.alpha=u>.65?1-(u-.65)/.35:1;v.sx=v.sy=1-.3*u},EA.lin);
     await step(a,vx,vy,220);
@@ -1012,7 +874,7 @@ async function capture(a,v,m){
     const cx=a.px,cy=a.py;
     await tw(170,(e,u)=>{a.px=lerp(cx,vx,e);a.py=lerp(cy,vy,e);a.lean=lerp(-.1,.14,e);a.ph=u*30;a.moving=true},EA.inn);
     a.moving=false;
-    v.mood='dead';v.flash=1;shake=1.3;ring(vx,vy);puff(vx,vy,10,undefined,.16);pop(vx,vy,'ГҮМ!');
+    v.mood='dead';v.flash=1;shake=1.3;ring(vx,vy);puff(vx,vy,10,undefined,.16);pop(vx,vy,'ГҮМ!');snd('boom');
     const kx=vx+ux*2.6,ky=vy+uy*2.6-.6,sp=(ux>=0?1:-1)*11;
     await Promise.all([
       tw(950,(e,u)=>{v.px=lerp(vx,kx,e);v.py=lerp(vy,ky,e);v.z=2.6*Math.sin(Math.PI*Math.min(1,u*.95));v.rot=u*sp;v.flash=Math.max(0,1-u*4);v.sx=v.sy=1-.55*u;v.alpha=u>.75?1-(u-.75)/.25:1;if(rand()<.4)spark(v.px,v.py,v.z+.3)},EA.lin),
@@ -1021,18 +883,18 @@ async function capture(a,v,m){
   }else if(a.t==='B'){
     await tw(220,e=>{a.strike=-.5*e},EA.out);
     await tw(90,e=>{a.strike=-.5+1.5*e},EA.inn);
-    v.mood='dead';v.tintCol='60,190,60';shake=.5;pop(vx,vy,'ҚАП!','#C8FF9E','#0F3A06');bubbles(vx,vy,6);
+    v.mood='dead';v.tintCol='60,190,60';shake=.5;pop(vx,vy,'ҚАП!','#C8FF9E','#0F3A06');snd('hiss');bubbles(vx,vy,6);
     await tw(180,e=>{a.strike=1-.7*e;v.tint=e*.8;v.rot=.12*Math.sin(e*12)},EA.lin);
     await tw(900,(e,u)=>{v.sy=1-e;v.sx=1+.35*e;v.tint=.8;v.rot=Math.sin(u*40)*.08*(1-u);v.alpha=1-Math.max(0,(u-.7)/.3);if(rand()<.3)bubbles(vx,vy,1)},EA.inn);
     a.strike=0;
     await travel(a,vx,vy);
   }else if(a.t==='Q'){
-    a.moving=true;
+    a.moving=true;snd('flap');
     const sx0=a.px,sy0=a.py,hx=vx-ux*.25,hy=vy-uy*.25;
     await tw(480,(e,u)=>{a.px=lerp(sx0,hx,e);a.py=lerp(sy0,hy,e);a.z=.95*e;a.wing=.5+.5*Math.sin(u*42)},EA.io);
     await wait(80);
     await tw(190,e=>{a.px=lerp(hx,vx,e);a.py=lerp(hy,vy,e);a.z=lerp(.95,.12,e);a.wing=lerp(1,.15,e);a.strike=e},EA.inn);
-    v.mood='dead';v.flash=1;shake=.7;pop(vx,vy,'ШАП!');feathers(vx,vy,.4,7,col.main);puff(vx,vy,4);
+    v.mood='dead';v.flash=1;shake=.7;pop(vx,vy,'ШАП!');snd('screech');feathers(vx,vy,.4,7,col.main);puff(vx,vy,4);
     await tw(560,(e,u)=>{a.z=.12+1.0*e;a.wing=.5+.5*Math.sin(u*45);v.px=a.px;v.py=a.py;v.z=a.z-.18;v.sx=v.sy=1-.65*e;v.rot=Math.sin(u*30)*.25;v.alpha=1-Math.max(0,(u-.6)/.4);v.flash=Math.max(0,1-u*5);if(rand()<.15)feathers(a.px,a.py,a.z,1,PAL[a.c].main)},EA.io);
     await tw(340,e=>{a.z=1.12*(1-e);a.wing=.4*(1-e)+.1*Math.sin(e*20);a.strike=1-e},EA.out);
     a.moving=false;
@@ -1040,7 +902,7 @@ async function capture(a,v,m){
     await tw(220,e=>{a.strike=-e;a.lean=-.06*e},EA.out);
     await wait(50);
     await tw(100,e=>{a.strike=-1+2*e;a.lean=-.06+.2*e},EA.inn);
-    v.mood='dead';v.flash=1;shake=.8;pop(vx,vy,'ШАУ!');slash((ax+vx)/2+ux*.1,(ay+vy)/2,Math.atan2(dy,dx));puff(vx,vy,5);
+    v.mood='dead';v.flash=1;shake=.8;pop(vx,vy,'ШАУ!');snd('sword');slash((ax+vx)/2+ux*.1,(ay+vy)/2,Math.atan2(dy,dx));puff(vx,vy,5);
     await tw(420,(e,u)=>{v.rot=1.5*e*a.face;v.flash=Math.max(0,1-u*4)},EA.inn);
     await Promise.all([tw(380,e=>{v.alpha=1-e},EA.lin),tw(260,e=>{a.strike=1-e;a.lean=.14*(1-e)},EA.out)]);
     puff(vx,vy,8,'#ffffff');
@@ -1054,7 +916,7 @@ async function animateMove(m){
   if(v)await capture(a,v,m);else await travel(a,tx,ty);
   a.mood='idle';
   if(m.promo){
-    a.t='Q';rest2(a);
+    a.t='Q';rest2(a);snd('promo');
     pop(tx,ty,'БҮРКІТ!','#FFF2A8');feathers(tx,ty,.4,8,PAL[a.c].main);for(let i=0;i<6;i++)spark(tx,ty,.5);
     await tw(420,(e,u)=>{a.z=.25*Math.sin(Math.PI*u);a.wing=.6*Math.sin(Math.PI*u)},EA.lin);
   }
@@ -1085,20 +947,23 @@ function afterMove(silent){
     setStatus(winner?NAME[winner]+' жағы жеңді':'Тең ойын',winner||turn);
     showResult();
   }else{
-    setStatus(checked?'Шах! '+NAME[turn]+' Батыры қауіпте':NAME[turn]+' жағының жүрісі',turn);
-    if(checked&&!silent){const k=kingSq(board,turn);pop(k&7,k>>3,'ШАХ!','#FF8A7A');shake=Math.max(shake,.4)}
+    const own=net&&net.you?(turn===net.you?'Сенің жүрісің · '+NAME[turn]:'Қарсылас ойланып жатыр…'):NAME[turn]+' жағының жүрісі';
+    setStatus(checked?'Шах! '+NAME[turn]+' Батыры қауіпте':own,turn);
+    if(checked&&!silent){const k=kingSq(board,turn);pop(k&7,k>>3,'ШАХ!','#FF8A7A');shake=Math.max(shake,.4);snd('check')}
   }
   renderLost();
+  renderBars();
   setHint(sel>=0?board[sel]:null);
 }
 function showResult(){
-  $('#resT').textContent=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
-  $('#resS').textContent=winner?'Мат: Батыр құлады.':(checked?'':'Жүріс қалмады, бірақ Батыр қауіпсіз.');
+  const R={mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
+  let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
+  if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
+  $('#resT').textContent=t;
+  const rs=net&&net.reason?net.reason:(winner?'mate':(checked?'':'stalemate'));
+  $('#resS').textContent=R[rs]||'';
   $('#result').hidden=false;
-  if(mode==='ai'&&!reported&&window.Plat){
-    reported=true;
-    window.Plat.report({mode:'ai',side:'w',result:winner==='w'?'win':winner==='b'?'loss':'draw',moves:stat.moves,captures:stat.caps,lost:lost.w.length,byPiece:stat.byPiece,promos:stat.promos});
-  }
+  snd('end',winner&&(!net||winner===net.you));
 }
 function setHint(p){
   const h=$('#hint');h.textContent='';
@@ -1108,7 +973,7 @@ function setHint(p){
   const s=document.createElement('span');s.textContent=INFO[p.t].long;
   h.append(b,br,s);
 }
-async function playMove(m){
+async function playMove(m,remote){
   const g=gen;
   busy=true;hist.push(snap());sel=-1;selMoves=[];
   await animateMove(m);
@@ -1119,26 +984,25 @@ async function playMove(m){
   board[m.t]=a;board[m.f]=null;
   const face=a.face;rest(a,m.t>>3,m.t&7);a.face=face;
   last={f:m.f,t:m.t};
+  if(net)net.applied++;
   turn=opp(turn);
   afterMove(false);
   busy=false;
-  if(!over&&mode==='ai'&&turn==='b')aiTurn();
+  if(!net&&!over&&mode==='ai'&&turn==='b')aiTurn();
 }
 /* the bot thinks in a Web Worker so the page never freezes */
 let aiW=null,aiSeq=0,aiPend={};
 try{
-  const a=SRC.indexOf('// ===ENGINE_START==='),b=SRC.indexOf('// ===ENGINE_END===');
-  const code=SRC.slice(a,b)+"\nonmessage=e=>{const d=e.data;postMessage({id:d.id,m:bestMove(d.b,d.col,d.depth)})};";
-  aiW=new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
+  aiW=new Worker('engine-worker.js',{type:'module'});
   aiW.onmessage=e=>{const f=aiPend[e.data.id];if(f){delete aiPend[e.data.id];f(e.data.m)}};
   aiW.onerror=()=>{aiW=null;for(const k in aiPend){const f=aiPend[k];delete aiPend[k];f(undefined)}};
 }catch(e){aiW=null}
-function aiMove(col,depth){
-  const sync=()=>bestMove(board,col,depth);
+function aiMove(col,level){
+  const sync=()=>pickMove(board,col,level);
   if(!aiW)return Promise.resolve(sync());
   return new Promise(res=>{
     const id=++aiSeq;aiPend[id]=m=>res(m===undefined?sync():m);
-    aiW.postMessage({id,b:board.map(p=>p?{t:p.t,c:p.c,id:p.id}:null),col,depth});
+    aiW.postMessage({id,b:board.map(p=>p?{t:p.t,c:p.c,id:p.id}:null),col,level});
   });
 }
 async function aiTurn(){
@@ -1146,12 +1010,82 @@ async function aiTurn(){
   setStatus('Түн ойланып жатыр…','b');
   await wait(500);
   if(g!==gen)return;
-  const m=await aiMove('b',3);
+  const m=await aiMove('b',lvl);
   if(g!==gen)return;
   if(!m){busy=false;return}
   await playMove(m);
 }
-function newGame(){
+/* ---------- sound (WebAudio synth, no files) ---------- */
+let ac=null,master=null,nbuf=null,muted=false;
+try{muted=localStorage.getItem('mute')==='1'}catch(e){}
+function actx(){
+  if(muted)return null;
+  if(!ac){
+    try{ac=new(window.AudioContext||window.webkitAudioContext)();master=ac.createGain();master.gain.value=.6;master.connect(ac.destination);
+      nbuf=ac.createBuffer(1,ac.sampleRate,ac.sampleRate);const d=nbuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}catch(e){return null}
+  }
+  if(ac.state==='suspended')ac.resume();
+  return ac;
+}
+function tone(f,dur,o){
+  const a=actx();if(!a)return;o=o||{};
+  const t=a.currentTime+(o.delay||0),osc=a.createOscillator(),g=a.createGain();
+  osc.type=o.type||'sine';osc.frequency.setValueAtTime(f,t);
+  if(o.slide)osc.frequency.exponentialRampToValueAtTime(Math.max(20,f*o.slide),t+dur);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.vol||.25,t+(o.att||.006));g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  osc.connect(g);g.connect(master);osc.start(t);osc.stop(t+dur+.03);
+}
+function noise(dur,o){
+  const a=actx();if(!a)return;o=o||{};
+  const t=a.currentTime+(o.delay||0),src=a.createBufferSource(),fl=a.createBiquadFilter(),g=a.createGain();
+  src.buffer=nbuf;src.loop=true;
+  fl.type=o.type||'bandpass';fl.Q.value=o.q||1;fl.frequency.setValueAtTime(o.f0||1000,t);
+  if(o.f1)fl.frequency.exponentialRampToValueAtTime(o.f1,t+dur);
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.vol||.25,t+(o.att||.01));g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  src.connect(fl);fl.connect(g);g.connect(master);src.start(t);src.stop(t+dur+.03);
+}
+const SFX={
+  select:()=>tone(660,.05,{vol:.1}),
+  send:()=>tone(440,.06,{vol:.1,slide:1.3}),
+  start:()=>{tone(392,.14,{vol:.2});tone(523,.2,{vol:.2,delay:.12})},
+  hop:()=>{tone(300,.13,{vol:.22,slide:2.2,type:'triangle'});noise(.05,{type:'lowpass',f0:500,vol:.1,delay:.1})},
+  gallop:()=>{for(let i=0;i<4;i++){noise(.09,{type:'lowpass',f0:420,vol:.28,delay:i*.12});tone(95,.08,{vol:.25,delay:i*.12,slide:.6})}},
+  step:()=>noise(.07,{type:'highpass',f0:1500,vol:.1}),
+  walk:()=>{noise(.08,{type:'lowpass',f0:350,vol:.2});noise(.08,{type:'lowpass',f0:350,vol:.2,delay:.2})},
+  slither:()=>noise(.5,{type:'bandpass',f0:2500,f1:6000,q:2,vol:.12,att:.12}),
+  flap:()=>{for(let i=0;i<4;i++)noise(.1,{type:'lowpass',f0:700,f1:300,vol:.2,delay:i*.1})},
+  hitP:()=>{tone(220,.15,{vol:.3,slide:.5,type:'triangle'});noise(.1,{type:'lowpass',f0:900,vol:.25})},
+  kick:()=>{tone(130,.25,{vol:.45,slide:.4});noise(.18,{type:'lowpass',f0:700,vol:.35});tone(520,.5,{type:'sawtooth',vol:.09,slide:2,delay:.04});tone(800,.4,{type:'sawtooth',vol:.07,slide:.6,delay:.35})},
+  boom:()=>{tone(75,.55,{vol:.55,slide:.45});noise(.45,{type:'lowpass',f0:500,f1:120,vol:.45});tone(160,.3,{vol:.3,slide:.5,type:'square'})},
+  hiss:()=>{noise(.6,{type:'highpass',f0:5000,vol:.28,att:.05});tone(200,.3,{vol:.12,slide:.6,type:'sawtooth',delay:.05})},
+  screech:()=>{tone(1500,.4,{type:'sawtooth',vol:.12,slide:1.8});tone(1900,.35,{type:'triangle',vol:.1,slide:.55,delay:.12});noise(.35,{type:'bandpass',f0:3500,vol:.15})},
+  sword:()=>{noise(.22,{type:'highpass',f0:2500,f1:8000,vol:.3,att:.02});tone(2400,.35,{type:'square',vol:.07,slide:.9,delay:.08});tone(180,.15,{vol:.3,slide:.5})},
+  promo:()=>[523,659,784,1047].forEach((f,i)=>tone(f,.22,{vol:.18,delay:i*.08,type:'triangle'})),
+  check:()=>{tone(880,.12,{vol:.2,type:'square'});tone(880,.16,{vol:.2,type:'square',delay:.16})},
+  win:()=>[523,659,784,1047,1319].forEach((f,i)=>tone(f,.3,{vol:.2,delay:i*.11,type:'triangle'})),
+  lose:()=>[392,330,262,196].forEach((f,i)=>tone(f,.35,{vol:.2,delay:i*.16,type:'sine'})),
+  chime:()=>[1047,1319].forEach((f,i)=>tone(f,.4,{vol:.15,delay:i*.1}))
+};
+function snd(n,arg){
+  try{
+    if(n==='end'){SFX[arg?'win':'lose']();return}
+    const f=SFX[n];if(f)f();
+  }catch(e){}
+}
+window.__snd=snd;
+function setMuted(m){
+  muted=m;try{localStorage.setItem('mute',m?'1':'0')}catch(e){}
+  const b=$('#sndBtn');if(b){b.textContent=m?'🔇':'🔊';b.setAttribute('aria-pressed',!m);b.setAttribute('aria-label',m?'Дыбысты қосу':'Дыбысты өшіру')}
+  if(!m){actx();snd('select')}
+}
+document.addEventListener('pointerdown',()=>{if(!muted)actx()},{once:true});
+const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e};
+const dec=c=>({f:c&63,t:(c>>6)&63,promo:!!(c>>12)});
+const PL=()=>window.Plat;
+const napi=(body,q)=>PL().api('match'+(q||''),body?{method:'POST',body}:undefined);
+let pollT=0,lastChange=0,pumping=false;
+
+function resetLocal(){
   gen++;busy=false;over=false;winner=null;sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;stat={moves:0,caps:0,byPiece:{},promos:0};reported=false;
   board=new Array(64).fill(null);
   for(let c=0;c<8;c++){
@@ -1164,39 +1098,281 @@ function newGame(){
   afterMove(true);
   setHint(null);
 }
+function restoreFromMoves(moves){
+  resetLocal();
+  for(const c of moves){
+    const m=dec(c),a=board[m.f],v=board[m.t];
+    if(v)lost[v.c].push(v.t);
+    board[m.t]=a;board[m.f]=null;
+    const face=a.face;rest(a,m.t>>3,m.t&7);a.face=face;
+    if(m.promo)a.t='Q';
+    last={f:m.f,t:m.t};turn=opp(turn);
+  }
+  afterMove(true);
+}
+function canAct(){
+  if(net)return net.status==='active'&&turn===net.you;
+  if(mode==='net')return false;
+  return mode==='ai'?turn==='w':true;
+}
+function setFlip(v){if(flip!==v){flip=v;buildBoard()}}
+
+/* ---- players bars, buttons ---- */
+function fillBar(box,info,c){
+  box.hidden=false;box.textContent='';
+  box.classList.toggle('on',!!net&&net.status==='active'&&!over&&turn===c);
+  const cv=el('canvas','pav2');box.append(cv);
+  requestAnimationFrame(()=>drawIcon(cv,info.avatar||(info.bot?'K':'P'),c,0));
+  const w=el('div','pn');
+  w.append(el('b','',(info.name||'?')+(info.role==='creator'?' 👑':'')));
+  w.append(el('span','',info.bot?'компьютер':(info.rating?'рейтинг '+info.rating:'')));
+  const d=el('i','pd');d.style.background=c==='w'?'#F2C94C':'#5560D6';
+  box.append(w,d);
+}
+function renderBars(){
+  const t=$('#pbTop'),b=$('#pbBot');
+  if(!net){t.hidden=b.hidden=true;return}
+  const you=net.you||'w',o=opp(you);
+  fillBar(t,o==='w'?net.white:net.black,o);
+  fillBar(b,you==='w'?net.white:net.black,you);
+}
+function refreshUI(){
+  $('#bUndo').hidden=!!net||mode==='net';
+  $('#bResign').hidden=!(net&&net.status==='active');
+  $('#lvlSeg').hidden=mode!=='ai';
+  const bn=$('#bNew');
+  bn.hidden=mode==='net'&&net&&net.status!=='done'&&!(net.status==='open'&&false);
+  bn.textContent=mode==='net'?'Лоббиге қайту':'Жаңа ойын';
+  $('#lvlSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.l===lvl));
+  updateClaim();
+}
+function updateClaim(){
+  const c=$('#bClaim');
+  c.hidden=!(net&&net.mode==='pvp'&&net.status==='active'&&!over&&turn!==net.you&&Date.now()-lastChange>125000);
+}
+setInterval(updateClaim,5000);
+
+/* ---- server games ---- */
+function adoptNet(m){
+  clearTimeout(pollT);
+  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0};
+  lastChange=Date.now();
+}
+function netResync(m){
+  if(!net)return;
+  net.moves=m.moves.slice();
+  restoreFromMoves(m.moves);
+  net.applied=m.moves.length;
+  net.status=m.status;net.ver=m.ver;
+  renderBars();refreshUI();
+}
+function netApply(m){
+  if(!net||m.id!==net.id)return;
+  const was=net.status;
+  if(m.ver!==net.ver)lastChange=Date.now();
+  net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;
+  if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
+  if(was==='open'&&m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start')}
+  renderBars();refreshUI();
+  netPump();
+  if(m.status==='done')finishNet();
+}
+async function netPump(){
+  if(pumping||!net)return;
+  pumping=true;
+  try{
+    while(net&&net.applied<net.moves.length){
+      if(busy||over){await wait(60);continue}
+      const g=gen,n=net;
+      await playMove(dec(n.moves[n.applied]),true);
+      if(g!==gen||net!==n)break;
+    }
+  }finally{pumping=false}
+  if(net&&net.status==='done')finishNet();
+}
+function finishNet(){
+  if(!net||net.status!=='done')return;
+  if(net.applied<net.moves.length||busy)return;
+  if(!over){
+    over=true;winner=net.winner;sel=-1;selMoves=[];
+    setStatus(winner?NAME[winner]+' жағы жеңді':'Тең ойын',winner||turn);
+    showResult();
+  }
+  if(net.award&&!net.awardShown){
+    net.awardShown=true;
+    PL().showAward(net.award,net.winner===null?'draw':net.winner===net.you?'win':'loss');
+  }
+  renderBars();refreshUI();
+  if(net.mode==='pvp'&&!net.award&&net.moves.length>=8&&net.tries<4)startPoll();
+}
+function startPoll(){clearTimeout(pollT);if(net&&net.mode==='pvp')pollT=setTimeout(pollOnce,1100)}
+async function pollOnce(){
+  const n=net;
+  if(!n||n.mode!=='pvp')return;
+  const r=await napi(null,'?id='+n.id+'&v='+n.ver);
+  if(net!==n)return;
+  if(r.match)netApply(r.match);
+  if(n.status==='done'){if(!n.award&&n.moves.length>=8&&n.tries++<4)startPoll();return}
+  startPoll();
+}
+async function netSend(mv){
+  const n=net;
+  if(n.mode==='ai')setStatus('Түн ойланып жатыр…','b');
+  const r=await napi({action:'move',id:n.id,f:mv.f,t:mv.t});
+  if(net!==n)return;
+  if(r.ok&&r.match){netApply(r.match);return}
+  PL().toast('⚠️',r.error||'Желі қатесі','Ойын қайта синхрондалып жатыр');
+  const q=r.match?r:await napi(null,'?id='+n.id);
+  if(net===n&&q.match){while(busy)await wait(60);netResync(q.match);netApply(q.match)}
+}
+function humanMove(mv){
+  playMove(mv);
+  if(net){snd('send');netSend(mv)}
+}
+
+/* ---- lobby ---- */
+function hideLobby(){$('#lobby').hidden=true}
+function showLobby(kind){
+  const L=$('#lobby');L.textContent='';L.hidden=false;
+  const card=el('div','lcard');L.append(card);
+  if(!PL().isIn()){
+    card.append(el('h3','','Онлайн ойын'),el('p','','Шын ойыншылармен ойнау үшін алдымен кіру керек.'));
+    const b=el('button','btn','Кіру / Тіркелу');b.onclick=()=>PL().login();card.append(b);
+    return;
+  }
+  if(kind==='wait'&&net){
+    card.append(el('h3','',net.code&&!net.public?'Дос күтілуде…':'Қарсылас іздеп жатырмыз…'));
+    const sp=el('div','spin');card.append(sp);
+    if(net.code&&net.showCode){
+      card.append(el('p','','Досыңа осы кодты жібер:'));
+      card.append(el('div','code',net.code));
+      const lk=location.origin+'/?join='+net.code;
+      const cp=el('button','btn','Сілтемені көшіру');
+      cp.onclick=async()=>{try{await navigator.clipboard.writeText(lk);PL().toast('📋','Көшірілді',lk)}catch(e){PL().toast('📋','Сілтеме',lk,null,9000)}};
+      card.append(cp);
+    }
+    const cb=el('button','btn ghost','Бас тарту');
+    cb.onclick=async()=>{const n=net;net=null;clearTimeout(pollT);if(n)await napi({action:'cancel',id:n.id});showLobby('menu');renderBars();refreshUI()};
+    card.append(cb);
+    return;
+  }
+  card.append(el('h3','','Онлайн ойын'),el('p','','Нақты ойыншымен ойна, рейтингің көтеріледі.'));
+  const q=el('button','btn','⚡ Жылдам ойын');q.onclick=()=>startPvp('quick');
+  const c=el('button','btn ghost','🤝 Дос шақыру');c.onclick=()=>startPvp('create');
+  const row=el('div','jrow');
+  const inp=el('input');inp.placeholder='Код';inp.maxLength=8;inp.autocapitalize='characters';inp.setAttribute('aria-label','Ойын коды');
+  const jb=el('button','btn ghost','Кіру');
+  jb.onclick=()=>joinCode(inp.value);
+  inp.onkeydown=e=>{if(e.key==='Enter')joinCode(inp.value)};
+  row.append(inp,jb);
+  card.append(q,c,row);
+}
+async function startPvp(action){
+  const r=await napi({action});
+  if(!r.match){PL().toast('⚠️',r.error||'Қате');return}
+  openPvp(r.match,action==='create');
+}
+async function joinCode(code){
+  code=String(code||'').trim();
+  if(!code)return;
+  const r=await napi({action:'join',code});
+  if(!r.match){PL().toast('⚠️',r.error||'Қосыла алмадық');return}
+  openPvp(r.match,false);
+}
+function openPvp(m,showCode){
+  setMode('net',true);
+  adoptNet(m);net.public=!showCode&&m.status==='open';net.showCode=showCode;
+  if(m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start');renderBars();refreshUI();}
+  else{showLobby('wait');renderBars();refreshUI()}
+  startPoll();
+}
+
+/* ---- flow ---- */
+async function newGame(){
+  clearTimeout(pollT);
+  if(mode==='net'){
+    // back to the lobby (an unfinished game cannot be left from here)
+    if(net&&net.status!=='done')return;
+    net=null;resetLocal();setFlip(false);renderBars();showLobby('menu');refreshUI();return;
+  }
+  net=null;setFlip(false);resetLocal();hideLobby();
+  if(mode==='ai'&&PL().isIn()){
+    const g=gen;
+    busy=true;setStatus('Ойын дайындалуда…','w');
+    const r=await napi({action:'ai',level:lvl});
+    if(g!==gen)return;
+    busy=false;
+    if(r.match){adoptNet(r.match);setStatus('Сенің жүрісің · Күн','w')}
+    else{setStatus('Күн жағының жүрісі','w');PL().toast('⚠️',r.error||'Серверге қосылу мүмкін емес','Бұл ойын рейтингсіз болады')}
+  }
+  renderBars();refreshUI();
+}
 function undo(){
-  if(busy||!hist.length)return;
+  if(net||busy||!hist.length)return;
   let s=hist.pop();
   if(mode==='ai'&&s.turn==='b'&&hist.length)s=hist.pop();
   gen++;
   restoreSnap(s);
 }
 cv.addEventListener('pointerdown',e=>{
-  if(busy||over)return;
-  if(mode==='ai'&&turn==='b')return;
+  if(busy||over||!canAct())return;
   const r=cv.getBoundingClientRect();
   const x=(e.clientX-r.left)/r.width*S,y=(e.clientY-r.top)/r.height*S;
-  const c=Math.floor((x-pad)/T),rr=Math.floor((y-pad)/T);
+  let c=Math.floor((x-pad)/T),rr=Math.floor((y-pad)/T);
   if(c<0||c>7||rr<0||rr>7){sel=-1;selMoves=[];setHint(null);return}
+  c=fx(c);rr=fx(rr);
   const i=rr*8+c;
   const mv=selMoves.find(m=>m.t===i);
-  if(mv){playMove(mv);return}
+  if(mv){humanMove(mv);return}
   const p=board[i];
   if(p&&p.c===turn){
-    sel=i;selMoves=allMoves.filter(m=>m.f===i);setHint(p);
+    sel=i;selMoves=allMoves.filter(m=>m.f===i);setHint(p);snd('select');
   }else{sel=-1;selMoves=[];setHint(null)}
 });
-function setMode(m){
+$('#sndBtn').addEventListener('click',()=>setMuted(!muted));
+setMuted(muted);
+function setMode(m,quiet){
+  if(net&&net.mode==='pvp'&&net.status==='active'&&m!=='net'){PL().toast('♟️','Алдымен онлайн ойынды аяқта','«Берілу» батырмасы бар');return}
+  if(net&&net.mode==='pvp'&&net.status==='open'&&m!=='net'){napi({action:'cancel',id:net.id});net=null;clearTimeout(pollT)}
+  if(net&&net.mode==='ai'&&m!=='ai')net=null;
   mode=m;
   $('#mAi').setAttribute('aria-pressed',m==='ai');
+  $('#mNet').setAttribute('aria-pressed',m==='net');
   $('#mTwo').setAttribute('aria-pressed',m==='two');
-  newGame();
+  if(quiet){refreshUI();return}
+  if(m==='net'){
+    if(net&&net.mode==='pvp'){refreshUI();return}
+    net=null;resetLocal();setFlip(false);renderBars();showLobby('menu');refreshUI();
+  }else newGame();
 }
 $('#mAi').addEventListener('click',()=>setMode('ai'));
+$('#mNet').addEventListener('click',()=>setMode('net'));
 $('#mTwo').addEventListener('click',()=>setMode('two'));
 $('#bNew').addEventListener('click',newGame);
 $('#bUndo').addEventListener('click',undo);
-$('#resBtn').addEventListener('click',newGame);
+$('#resBtn').addEventListener('click',()=>{if(mode==='net')newGame();else newGame()});
+$('#lvlSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  lvl=+b.dataset.l;try{localStorage.setItem('lvl',lvl)}catch(x){}
+  refreshUI();
+  if(net&&net.mode==='ai'&&net.status==='active')PL().toast('🎚️','Деңгей келесі ойыннан бастап өзгереді');
+});
+let resArmed=0;
+$('#bResign').addEventListener('click',async e=>{
+  const b=e.currentTarget;
+  if(!resArmed){resArmed=setTimeout(()=>{resArmed=0;b.textContent='Берілу'},3000);b.textContent='Растау?';return}
+  clearTimeout(resArmed);resArmed=0;b.textContent='Берілу';
+  const n=net;if(!n)return;
+  const r=await napi({action:'resign',id:n.id});
+  if(net===n&&r.match)netApply(r.match);
+  else if(!r.ok)PL().toast('⚠️',r.error||'Қате');
+});
+$('#bClaim').addEventListener('click',async()=>{
+  const n=net;if(!n)return;
+  const r=await napi({action:'claim',id:n.id});
+  if(net===n&&r.match)netApply(r.match);else PL().toast('⏳',r.error||'Әзірге күтіңіз');
+});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&net&&net.mode==='pvp')startPoll()});
 
 /* ---------- character cards ---------- */
 for(const t of ['K','Q','R','B','N','P']){
@@ -1211,10 +1387,40 @@ for(const t of ['K','Q','R','B','N','P']){
 }
 
 window.__icon=(cvs,t,c)=>drawIcon(cvs,t,c,0);
+async function startup(){
+  refreshUI();
+  const P=PL();
+  await P.ready;
+  const jp=new URLSearchParams(location.search).get('join');
+  let resumed=false;
+  if(P.isIn()){
+    const r=await napi(null,'?active=1');
+    if(r.match&&r.match.status!=='done'){
+      const m=r.match;
+      mode=m.mode==='ai'?'ai':'net';
+      $('#mAi').setAttribute('aria-pressed',mode==='ai');$('#mNet').setAttribute('aria-pressed',mode==='net');
+      adoptNet(m);setFlip(net.you==='b');
+      if(m.status==='active'){restoreFromMoves(m.moves);net.applied=m.moves.length;hideLobby()}
+      else{net.public=true;showLobby('wait')}
+      renderBars();refreshUI();startPoll();resumed=true;
+      P.toast('♟️','Ойын жалғасты','Тоқтаған жерден жалғастырдық');
+    }
+  }
+  if(!resumed)await newGame();
+  if(jp){
+    history.replaceState(null,'',location.pathname);
+    if(P.isIn())joinCode(jp);else{P.toast('🔑','Ойынға қосылу үшін кіріңіз');P.login();const once=()=>{if(P.isIn()){joinCode(jp)}};P.onAuth(once,true)}
+  }
+  P.onAuth(st=>{
+    if(st==='out'){if(net&&net.mode==='pvp')clearTimeout(pollT);net=null;if(mode==='net'){resetLocal();setFlip(false);showLobby('menu')}else newGame();renderBars();refreshUI()}
+    else if(st==='in'){if(mode==='ai'&&!net&&!busy&&!hist.length)newGame();else if(mode==='net'&&!net)showLobby('menu')}
+  });
+}
 /* ---------- start ---------- */
 new ResizeObserver(layout).observe(stage);
 layout();
-newGame();
+resetLocal();
+startup();
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{buildBoard()});
 requestAnimationFrame(frame);
 })();
