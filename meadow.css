@@ -100,3 +100,31 @@ h2::after{opacity:.9}
 .opts .seg{flex:1 1 auto;min-width:0}
 .opts .seg button{flex:1;white-space:nowrap}
 #perSeg button{font-size:.76rem;padding:6px 6px}
+
+/* ===== v3: slim top bar, no horizontal overflow ===== */
+html,body{overflow-x:hidden;max-width:100%}
+.cols{grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){.cols{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}}
+.col-main,.col-side{min-width:0}
+.hero{background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;overflow:visible;padding:0 0 4px!important;min-height:0!important;border-bottom:2px solid var(--line)!important}
+.hero-art{display:none}
+.hero .top,.hero .top{flex-direction:row!important;align-items:center!important;padding:4px 0!important;gap:8px}
+.hero .brand{gap:8px;flex:1;min-width:0}
+.logo{width:34px!important;height:34px!important;animation:none}
+.hero h1{font-size:1.15rem!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:none!important}
+.tagline{display:none}
+.topr{flex:none;max-width:60%}
+.acct{max-width:100%;min-height:40px}
+.acct .nm,.acct .lv{max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub{display:none}
+.bar{position:static;border:0;padding:0}
+@media(max-width:700px){.app{gap:10px}}
+.seg,.bar .seg,.opts .seg{box-sizing:border-box;max-width:100%}
+.opts .seg{overflow:hidden}
+#perSeg button{padding:6px 4px;font-size:.72rem}
+.hero h1{font-size:1rem!important}
+.sndb{width:38px;height:38px;min-height:0;flex:none}
+.acct.out{padding-inline:12px;font-size:.88rem;white-space:nowrap}
+.app{grid-template-columns:minmax(0,1fr)}
+.col-main,.col-side{grid-template-columns:minmax(0,1fr)}
+.toast{max-width:min(420px,calc(100vw - 24px))!important;box-sizing:border-box;user-select:none;-webkit-user-select:none}

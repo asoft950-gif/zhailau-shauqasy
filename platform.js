@@ -28,7 +28,7 @@ function toast(icn,title,sub,action,ms){
   box.append(t);const tm=setTimeout(()=>t.remove(),ms||4500);
   /* swipe sideways (or up) to dismiss */
   let x0=0,y0=0,dx=0,dy=0,drag=false;
-  t.style.touchAction='pan-y';
+  t.style.touchAction='none';
   t.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;drag=true;x0=e.clientX;y0=e.clientY;dx=dy=0;t.style.transition='none';try{t.setPointerCapture(e.pointerId)}catch(_){}});
   t.addEventListener('pointermove',e=>{if(!drag)return;dx=e.clientX-x0;dy=Math.min(0,e.clientY-y0);t.style.transform='translate('+dx+'px,'+dy+'px)';t.style.opacity=String(Math.max(.2,1-Math.max(Math.abs(dx),-dy)/200))});
   const end=()=>{if(!drag)return;drag=false;
