@@ -179,3 +179,15 @@ export async function claimQuest(uid, key) {
   await sql.query('UPDATE users SET coins=coins+$1 WHERE id=$2', [q.reward, uid]);
   return q.reward;
 }
+
+/* ---------- piece skins ---------- */
+export const PSKINS = {
+  classic: { price: 0 }, beast: { price: 0 },
+  heroes: { price: 500, ach: 'wins_10' }, alien: { price: 600, ach: 'pvp_win' }, space: { price: 700, ach: 'streak_5' },
+  dark: { price: 800, ach: 'wins_25' }, light: { price: 800, ach: 'rating_1200' }
+};
+export async function unlockedPieceSkins(u) {
+  const have = new Set((u.skins && u.skins.pown) || []);
+  const ach = new Set((await sql.query('SELECT key FROM achievements WHERE user_id=$1', [u.id])).map(r => r.key));
+  return Object.keys(PSKINS).filter(k => PSKINS[k].price === 0 || have.has(k) || u.role === 'creator' || (PSKINS[k].ach && ach.has(PSKINS[k].ach)));
+}

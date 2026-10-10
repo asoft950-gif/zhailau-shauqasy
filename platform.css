@@ -99,3 +99,8 @@
 .quest.bonus{border-style:dashed}
 .ach.skin .btn{margin-top:6px;padding:6px 10px;font-size:.8rem}
 .ach.skin.on{outline:2px solid #e8a91c}
+
+.pvrow{display:flex;justify-content:center;gap:2px}
+.pprev{width:56px;height:56px}
+.ach.pskin{gap:4px}
+.ach.pskin span{font-size:.72rem}

@@ -29,14 +29,14 @@ const newCode = () => crypto.randomBytes(4).toString('hex').slice(0, 6).toUpperC
 
 async function who(id) {
   if (!id) return null;
-  const r = await sql.query('SELECT id, username, avatar, role, rating FROM users WHERE id=$1', [id]);
+  const r = await sql.query('SELECT id, username, avatar, role, rating, skins FROM users WHERE id=$1', [id]);
   return r[0] || null;
 }
 const cseqOf = (m) => { const c = m.chat || []; return c.length ? c[c.length - 1].n : 0; };
 async function view(m, uid) {
   const [w, b] = await Promise.all([who(m.white_id), who(m.black_id)]);
   const you = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
-  const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating };
+  const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating, skin: (u.skins && u.skins.piece) || 'beast' };
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,

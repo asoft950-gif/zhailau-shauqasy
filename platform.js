@@ -206,6 +206,7 @@ function renderShop(b){
     c.append(bt);g.append(c);
   }
   b.append(g);
+  renderPieceShop(b);
 }
 async function renderCup(b,period){
   const sg=el('div','seg');
@@ -226,6 +227,33 @@ async function renderCup(b,period){
     tr.append(el('td','',['🥇','🥈','🥉'][u.rank-1]||String(u.rank)),nm,el('td','',u.wins+'/'+u.games),el('td','r',String(u.points)));t.append(tr);
   }
   b.append(t);
+}
+const PSN={classic:['♟️','Классика'],beast:['🐇','Жайлау жануарлары'],heroes:['🛡️','Батырлар'],alien:['👽','Инопланетяндар'],space:['🚀','Ғарыш сарбаздары'],dark:['💀','Dark fantasy'],light:['🦄','Light fantasy']};
+function renderPieceShop(b){
+  b.append(el('p','xpt','Фигура скиндері: жетістікпен ашылады немесе тиынға сатып алынады'));
+  const own=new Set(data.punlocked||[]),cur=me.skins.piece||'beast';
+  const g=el('div','agrid');
+  for(const k of Object.keys(data.pshop)){
+    const it=data.pshop[k],has=own.has(k),c=el('div','ach got skin pskin'+(cur===k?' on':''));
+    const cv=el('canvas','pprev');cv.width=cv.height=112;
+    requestAnimationFrame(()=>{if(window.__iconSkin)window.__iconSkin(cv,k,'K','w')});
+    const cv2=el('canvas','pprev');cv2.width=cv2.height=112;
+    requestAnimationFrame(()=>{if(window.__iconSkin)window.__iconSkin(cv2,k,'Q','b')});
+    const pv=el('div','pvrow');pv.append(cv,cv2);
+    c.append(pv,el('b','',PSN[k][1]));
+    if(!has&&it.ach&&data.catalog[it.ach])c.append(el('span','',data.catalog[it.ach].icon+' '+data.catalog[it.ach].name+' жетістігімен ашылады'));
+    const bt=el('button','btn',cur===k?'Қолданылуда':has?'Таңдау':'🪙 '+it.price);
+    bt.disabled=cur===k||(!has&&me.coins<it.price);
+    bt.onclick=async()=>{
+      bt.disabled=true;
+      const r=await patchMe(has?{equipP:k}:{buyP:k});
+      if(r.error){toast('⚠️',r.error);bt.disabled=false;return}
+      if(!has){const r2=await patchMe({equipP:k});if(r2.error)toast('⚠️',r2.error)}
+      await refresh();fireAuth('skin');await profileView('shop');
+    };
+    c.append(bt);g.append(c);
+  }
+  b.append(g);
 }
 function renderAch(b){
   const got=new Set(data.achievements.map(a=>a.key));
@@ -303,7 +331,7 @@ function init(){
   $('#acct').onclick=()=>me?profileView('profile'):authView('login');
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
-  window.Plat={skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
+  window.Plat={pskin:()=>(me&&me.skins&&me.skins.piece)||'beast',skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();

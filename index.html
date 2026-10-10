@@ -161,6 +161,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 <script src="platform.js" defer></script>
 
 <script type="module">
+import {makeSkins} from './skins.js';
 import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard} from './engine.js';
 
 (()=>{
@@ -558,6 +559,12 @@ try{lvl=+localStorage.getItem('lvl')||3}catch(e){}
 if(![1,2,3].includes(lvl))lvl=3;
 let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
+const SKS=makeSkins({E,Fill,RR,Tube,mixc,lit,drk,TAU});
+SKS.beast={name:'Жайлау',pal:PAL,draw:DRAW,sc:SC};
+let pskin={w:'beast',b:'beast'};
+const skO=c=>SKS[pskin[c]]||SKS.beast;
+const palO=c=>skO(c).pal[c],scO=(c,t)=>(skO(c).sc&&skO(c).sc[t])||SC[t],drawO=(c,t)=>skO(c).draw[t];
+const NM=(c,t)=>{const k=skO(c);return k.names?k.names[t]:INFO[t].name};
 let locLog=[],rp=null;
 let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
 let hist=[],lost={w:[],b:[]},parts=[],shake=0,time=0,gen=0,idc=1;
@@ -659,15 +666,15 @@ const off=document.createElement('canvas');
 let bakes=new Map();
 const BW=2.2,BH=1.5,BAX=1.1,BAY=1.35;
 function bake(t,col){
-  const k=t+col+T+'|'+dpr;let b=bakes.get(k);
+  const k=t+col+pskin[col]+T+'|'+dpr;let b=bakes.get(k);
   if(b)return b;
   b=document.createElement('canvas');
   b.width=Math.ceil(T*BW*dpr);b.height=Math.ceil(T*BH*dpr);
   const x=b.getContext('2d');
   x.setTransform(dpr,0,0,dpr,0,0);x.translate(T*BAX,T*BAY);
-  const s=T/100*SC[t];x.scale(s,s);
+  const s=T/100*scO(col,t);x.scale(s,s);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
-  DRAW[t](x,PAL[col],{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  drawO(col,t)(x,palO(col),{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
   bakes.set(k,b);return b;
 }
 function drawSprite(c,p,gx,gy,tm){
@@ -680,13 +687,13 @@ function drawSprite(c,p,gx,gy,tm){
   }
   c.save();c.translate(gx,gy);
   c.rotate(flip?-p.rot:p.rot);
-  const s=T/100*SC[p.t];
+  const s=T/100*scO(p.c,p.t);
   c.scale((flip?-p.face:p.face)*p.sx*s,p.sy*s);
   c.rotate(p.lean);
   c.lineJoin='round';c.lineCap='round';c.lineWidth=3;
   odata.t=tm+p.id*.37;odata.id=p.id;odata.ph=p.ph;odata.moving=p.moving;odata.strike=p.strike;odata.rear=p.rear;odata.wing=p.wing;odata.mood=p.mood;
   odata.blink=((tm*.9+p.id*1.3)%4)<.1;
-  DRAW[p.t](c,PAL[p.c],odata);
+  drawO(p.c,p.t)(c,palO(p.c),odata);
   c.restore();
 }
 function paintPiece(p,idx){
@@ -856,13 +863,13 @@ function frame(now){
 /* ---------- small icons ---------- */
 function drawIcon(cvs,t,c,tm){
   const d=Math.min(2,window.devicePixelRatio||1),sz=cvs.clientWidth||cvs.width/d||28;
-  const ik=t+c+sz+'|'+d;if(cvs._ik===ik)return;cvs._ik=ik;
+  const ik=t+c+pskin[c]+sz+'|'+d;if(cvs._ik===ik)return;cvs._ik=ik;
   if(cvs.width!==Math.round(sz*d)){cvs.width=Math.round(sz*d);cvs.height=Math.round(sz*d)}
   const x=cvs.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,sz,sz);
   x.translate(sz/2,sz*.9);
-  const s=sz/100*SC[t]*.95;x.scale(s,s);
+  const s=sz/100*scO(c,t)*.95;x.scale(s,s);
   x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
-  DRAW[t](x,PAL[c],{t:tm||0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  drawO(c,t)(x,palO(c),{t:tm||0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
 }
 
 /* ---------- animation helpers ---------- */
@@ -932,7 +939,7 @@ async function capture(a,v,m){
   if(Math.abs(dx)>.05){a.face=dx>0?1:-1}
   v.face=a.face>0?-1:1;
   a.mood='angry';
-  const col=PAL[v.c];
+  const col=palO(v.c);
   if(a.t!=='Q'){
     const reach=a.t==='B'?.95:.85;
     if(dist>reach)await travel(a,vx-ux*reach,vy-uy*reach);
@@ -980,7 +987,7 @@ async function capture(a,v,m){
     await wait(80);
     await tw(190,e=>{a.px=lerp(hx,vx,e);a.py=lerp(hy,vy,e);a.z=lerp(.95,.12,e);a.wing=lerp(1,.15,e);a.strike=e},EA.inn);
     v.mood='dead';v.flash=1;shake=.7;pop(vx,vy,'ШАП!');snd('screech');feathers(vx,vy,.4,7,col.main);puff(vx,vy,4);
-    await tw(560,(e,u)=>{a.z=.12+1.0*e;a.wing=.5+.5*Math.sin(u*45);v.px=a.px;v.py=a.py;v.z=a.z-.18;v.sx=v.sy=1-.65*e;v.rot=Math.sin(u*30)*.25;v.alpha=1-Math.max(0,(u-.6)/.4);v.flash=Math.max(0,1-u*5);if(rand()<.15)feathers(a.px,a.py,a.z,1,PAL[a.c].main)},EA.io);
+    await tw(560,(e,u)=>{a.z=.12+1.0*e;a.wing=.5+.5*Math.sin(u*45);v.px=a.px;v.py=a.py;v.z=a.z-.18;v.sx=v.sy=1-.65*e;v.rot=Math.sin(u*30)*.25;v.alpha=1-Math.max(0,(u-.6)/.4);v.flash=Math.max(0,1-u*5);if(rand()<.15)feathers(a.px,a.py,a.z,1,palO(a.c).main)},EA.io);
     await tw(340,e=>{a.z=1.12*(1-e);a.wing=.4*(1-e)+.1*Math.sin(e*20);a.strike=1-e},EA.out);
     a.moving=false;
   }else{ // king
@@ -1006,7 +1013,7 @@ async function animateMove(m){
   a.mood='idle';
   if(m.promo){
     a.t='Q';rest2(a);snd('promo');
-    pop(tx,ty,'БҮРКІТ!','#FFF2A8');feathers(tx,ty,.4,8,PAL[a.c].main);for(let i=0;i<6;i++)spark(tx,ty,.5);
+    pop(tx,ty,NM(a.c,'Q').toUpperCase()+'!','#FFF2A8');feathers(tx,ty,.4,8,palO(a.c).main);for(let i=0;i<6;i++)spark(tx,ty,.5);
     await tw(420,(e,u)=>{a.z=.25*Math.sin(Math.PI*u);a.wing=.6*Math.sin(Math.PI*u)},EA.lin);
   }
 }
@@ -1059,9 +1066,9 @@ function showResult(){
 function setHint(p){
   const h=$('#hint');h.textContent='';
   if(!p){h.textContent='Өз фигураңды бас: қайда жүре алатыны көрінеді. Қызыл шеңбер, жауды құлатуға болатын жер.';return}
-  const b=document.createElement('b');b.textContent=INFO[p.t].name+'. '+INFO[p.t].say;
+  const b=document.createElement('b');b.textContent=NM(p.c,p.t)+'. '+INFO[p.t].say;
   const br=document.createElement('br');
-  const s=document.createElement('span');s.textContent=INFO[p.t].long;
+  const s=document.createElement('span');s.textContent=skO(p.c).names?RULES[p.t]:INFO[p.t].long;
   h.append(b,br,s);
 }
 async function playMove(m,remote){
@@ -1230,6 +1237,7 @@ function renderBars(){
   fillBar(b,you==='w'?net.white:net.black,you);
 }
 function refreshUI(){
+  applyPSkins();
   renderEmo();
   $('#bUndo').hidden=!!net||mode==='net';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
@@ -1638,20 +1646,55 @@ $('#bClaim').addEventListener('click',async()=>{
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&net&&net.mode==='pvp')startPoll()});
 
 /* ---------- character cards ---------- */
-for(const t of ['K','Q','R','B','N','P']){
-  const d=document.createElement('div');d.className='card';
-  const k=document.createElement('canvas');k.className='ico';
-  const w=document.createElement('div');
-  const b=document.createElement('b');b.textContent=INFO[t].name;
-  const s=document.createElement('div');s.className='say';s.textContent=INFO[t].say;
-  const l=document.createElement('div');l.className='long';l.textContent=INFO[t].long;
-  w.append(b,s,l);d.append(k,w);$('#cards').appendChild(d);
-  icons.push({cv:k,t,c:'w'});
+const RULES={
+  P:'Алға жүреді, бірінші жүрісте екі қадам жасай алады. Қиғаш қағады. Соңғы қатарға жетсе, Ханшаға айналады.',
+  N:'Екі қадам тіке, бір қадам бүйірге секіреді. Басқалардың үстінен асып түседі.',
+  B:'Қиғаш сызықпен қанша болса да жүреді.',
+  R:'Алға, артқа, оңға, солға тіке жүреді.',
+  Q:'Тіке де, қиғаш та кез келген қашықтыққа жүреді.',
+  K:'Бір қадам кез келген жаққа. Ол құласа, ойын біледі.'};
+function renderCards(){
+  const box=$('#cards');box.textContent='';
+  for(let i=icons.length-1;i>=0;i--)if(icons[i].card)icons.splice(i,1);
+  for(const t of ['K','Q','R','B','N','P']){
+    const d=document.createElement('div');d.className='card';
+    const k=document.createElement('canvas');k.className='ico';
+    const w=document.createElement('div');
+    const b=document.createElement('b');b.textContent=NM('w',t);
+    const s=document.createElement('div');s.className='say';s.textContent=INFO[t].say;
+    const l=document.createElement('div');l.className='long';l.textContent=skO('w').names?RULES[t]:INFO[t].long;
+    w.append(b,s,l);d.append(k,w);box.appendChild(d);
+    icons.push({cv:k,t,c:'w',card:1});
+  }
 }
+renderCards();
 
 window.__setSkin=n=>{if(SKINS[n]&&n!==skinName){skinName=n;buildBoard()}};
 window.__icon=(cvs,t,c)=>drawIcon(cvs,t,c,0);
-function applySkin(){const P=PL();window.__setSkin(P.skin?P.skin():'grass')}
+function applyPSkins(){
+  const P=PL(),mine=P.pskin?P.pskin():'beast';
+  let w=mine,b=mine;
+  const src=net&&net.mode==='pvp'?net:rp;
+  if(src){
+    w=(src.white&&src.white.skin)||'beast';b=(src.black&&src.black.skin)||'beast';
+    if(net&&net.you==='w')w=mine;if(net&&net.you==='b')b=mine;
+    if(!SKS[w])w='beast';if(!SKS[b])b='beast';
+  }
+  if(pskin.w===w&&pskin.b===b)return;
+  pskin={w,b};
+  renderLost();renderBars();renderCards();setHint(sel>=0?board[sel]:null);
+  for(const ic of icons)ic.cv._ik='';
+}
+window.__applyPSkins=applyPSkins;
+window.__iconSkin=(cvs,id,t,c)=>{
+  const sk=SKS[id];if(!sk)return;
+  const sz=cvs.width,x=cvs.getContext('2d');x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,sz,sz);
+  x.translate(sz/2,sz*.93);const sc=sz/100*((sk.sc&&sk.sc[t])||SC[t])*.95;x.scale(sc,sc);
+  x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
+  sk.draw[t](x,sk.pal[c],{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+};
+window.__forceSkin=n=>{pskin={w:n,b:n};renderCards();renderLost();for(const ic of icons)ic.cv._ik='';bakes.clear()};
+function applySkin(){applyPSkins();const P=PL();window.__setSkin(P.skin?P.skin():'grass')}
 async function startup(){
   refreshUI();
   const P=PL();
