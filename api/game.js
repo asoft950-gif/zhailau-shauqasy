@@ -18,6 +18,7 @@ export default async function handler(req, res) {
     const capN = Math.min(caps, sum || caps);
 
     const u = (await sql.query('SELECT * FROM users WHERE id=$1', [uid]))[0];
+    if (!u || u.banned) return send(res, 403, { error: 'Аккаунт бұғатталған' });
     const win = b.result === 'win', draw = b.result === 'draw';
     const score = win ? 1 : draw ? .5 : 0;
     const exp = 1 / (1 + Math.pow(10, (1100 - u.rating) / 400));

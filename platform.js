@@ -40,7 +40,7 @@ function renderBtn(){
   if(!me){b.className='acct out';b.textContent='Кіру / Тіркелу';return}
   b.className='acct';
   b.append(avatarCanvas(me.avatar));
-  const w=el('span','nm',me.username);w.append(el('span','lv','Деңгей '+me.level+' · '+me.rating));
+  const w=el('span','nm',me.username);w.append(el('span','lv',(me.role==='creator'?'👑 Создатель · ':'')+'Деңгей '+me.level+' · '+me.rating));
   b.append(w);
 }
 async function refresh(){
@@ -103,14 +103,16 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  for(const [k,l] of [['profile','Профиль'],['ach','Жетістіктер'],['top','Рейтинг']]){
+  const tl=[['profile','Профиль'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
   d.append(tb);
   const body=el('div');d.append(body);
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
-  else await renderTop(body);
+  else if(tab==='top')await renderTop(body);
+  else await renderAdmin(body,'');
   openOv();
 }
 function renderProfile(b){
@@ -118,6 +120,7 @@ function renderProfile(b){
   const ph=el('div','phead');
   const av=el('canvas','pav');requestAnimationFrame(()=>icon(av,u.avatar));
   const w=el('div');w.append(el('div','pname',u.username));
+  if(u.role==='creator'){const bd=el('span','badge','👑 Создатель');w.append(bd)}
   w.append(el('p','pbio',u.bio||'Өзің туралы бірдеңе жаз…'));
   ph.append(av,w);b.append(ph);
   const base=Math.pow(u.level-1,2)*50,span=u.xpNext-base;
@@ -171,10 +174,42 @@ async function renderTop(b){
   const t=el('table','lbt');
   r.rows.forEach((u,i)=>{
     const tr=el('tr',me&&u.username===me.username?'me':'');
-    const nm=el('td');const w=el('div','u');w.append(avatarCanvas(u.avatar),el('span','',u.username));nm.append(w);
+    const nm=el('td');const w=el('div','u');w.append(avatarCanvas(u.avatar),el('span','',u.username+(u.role==='creator'?' 👑':'')));nm.append(w);
     tr.append(el('td','',String(i+1)),nm,el('td','',u.wins+'/'+u.games),el('td','r',String(u.rating)));t.append(tr);
   });
   b.append(t);
+}
+
+async function renderAdmin(b,q){
+  b.textContent='';
+  const sf=el('div','fld');const si=el('input');si.type='search';si.placeholder='Ойыншыны іздеу…';si.value=q;si.setAttribute('aria-label','Іздеу');sf.append(si);
+  si.onkeydown=e=>{if(e.key==='Enter')renderAdmin(b,si.value)};
+  b.append(sf);
+  const r=await api('admin?q='+encodeURIComponent(q));
+  if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
+  b.append(el('p','xpt','Барлығы: '+r.total+' ойыншы'));
+  const ul=el('ul','adm');
+  for(const u of r.rows){
+    const li=el('li',u.banned?'ban':'');
+    const info=el('div','ai');info.append(el('b','',u.username+(u.role==='creator'?' 👑':'')+(u.banned?' · бұғатталған':'')),el('span','',u.games+' ойын · '+u.wins+' жеңіс · '+u.rating));
+    li.append(info);
+    if(u.role!=='creator'){
+      const act=el('div','aa');
+      const mk=(label,action,danger)=>{
+        const bt=el('button','sm'+(danger?' dg':''),label);bt.type='button';let armed=false;
+        bt.onclick=async()=>{
+          if(danger&&!armed){armed=true;bt.textContent='Растау?';setTimeout(()=>{armed=false;bt.textContent=label},3000);return}
+          bt.disabled=true;const x=await api('admin',{method:'POST',body:{id:u.id,action}});
+          if(!x.ok){toast('⚠️',x.error||'Қате');bt.disabled=false;return}
+          renderAdmin(b,si.value);
+        };act.append(bt)};
+      mk(u.banned?'Ашу':'Бұғаттау',u.banned?'unban':'ban',!u.banned);
+      mk('Нөлдеу','reset',true);mk('Жою','delete',true);
+      li.append(act);
+    }
+    ul.append(li);
+  }
+  b.append(ul);
 }
 
 /* ---------- game hook ---------- */
@@ -193,6 +228,10 @@ async function report(p){
     setTimeout(()=>{ if(a)toast(a.icon,'Жетістік: '+a.name,a.desc,null,5500) },delay);delay+=1100;
   }
   refresh();
+  fetch('/api/leaderboard').then(r=>r.json()).then(j=>{
+    const f=$('#foot');if(!f||!j.creators||!j.creators.length)return;
+    f.textContent='Создатель: ';const b=el('b','','👑 '+j.creators.join(', '));f.append(b);
+  }).catch(()=>{});
 }
 
 /* ---------- init ---------- */

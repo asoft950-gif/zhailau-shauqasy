@@ -83,6 +83,7 @@ export const ACH = {
   king_kill:   { name: 'Батыр қылышы', desc: 'Батырмен жауды қағып алу', icon: '🗡️' },
   promo:       { name: 'Қоян — Бүркіт', desc: 'Қоянды бүркітке айналдыру', icon: '✨' },
   hunter_50:   { name: 'Аңшы', desc: 'Барлығы 50 жауды қағып алу', icon: '🎯' },
+  creator:     { name: 'Жайлау жаратушысы', desc: 'Осы ойынның Создателі', icon: '🌄' },
   rating_1200: { name: 'Шебер', desc: 'Рейтинг 1200-ге жету', icon: '⭐' }
 };
 export function earned(u, g, had) {
