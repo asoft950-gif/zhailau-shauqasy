@@ -177,3 +177,18 @@ body.finale .sky{filter:brightness(.7) saturate(1.2)}
 .rpinfo{display:flex;align-items:center;gap:8px;justify-content:space-between;font-weight:700;font-size:.9rem}
 .rpinfo .ghost{border:0;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:6px 8px;border-radius:10px}
 .rpinfo .ghost:hover{background:rgba(127,127,127,.18)}
+
+/* ---- emotes ---- */
+.emobar{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+.emo{border:2px solid var(--gold-d);background:var(--panel);color:var(--fg);border-radius:999px;padding:6px 11px;font:700 .8rem/1 inherit;cursor:pointer;transition:transform .12s}
+.emo.big{font-size:1.2rem;padding:5px 10px}
+.emo:active{transform:scale(.92)}.emo:disabled{opacity:.5}
+.stage{position:relative}
+.ebub{position:absolute;left:50%;transform:translateX(-50%);z-index:6;background:#fff;color:#2b1a05;border:2px solid #2b1a05;border-radius:16px;padding:8px 14px;font-weight:800;font-size:.95rem;box-shadow:0 6px 16px rgba(0,0,0,.35);animation:ebub 3.8s ease forwards;pointer-events:none;white-space:nowrap}
+.ebub.me{bottom:12px}.ebub.op{top:12px}
+@keyframes ebub{0%{opacity:0;transform:translate(-50%,10px) scale(.7)}8%{opacity:1;transform:translate(-50%,0) scale(1.05)}14%{transform:translate(-50%,0) scale(1)}85%{opacity:1}100%{opacity:0}}
+.efly{position:absolute;bottom:8%;z-index:6;font-size:2.4rem;animation:efly 2.4s ease-out forwards;pointer-events:none;text-align:center;filter:drop-shadow(0 4px 6px rgba(0,0,0,.4))}
+.efly small{display:block;font-size:.65rem;font-weight:800;color:#fff;text-shadow:0 1px 3px #000}
+@keyframes efly{0%{opacity:0;transform:translateY(0) scale(.5)}15%{opacity:1;transform:translateY(-30px) scale(1.2)}100%{opacity:0;transform:translateY(-220px) scale(1)}}
+.lcard h4{margin:6px 0 0;font-size:.9rem}
+.lcard .live{font-size:.82rem;padding:8px 10px}

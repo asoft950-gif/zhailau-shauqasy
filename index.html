@@ -131,6 +131,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
   </div>
 
   <div class="pbar" id="pbBot" hidden></div>
+    <div class="emobar" id="emobar" hidden></div>
   <p class="hint" id="hint"></p>
   </div>
 
@@ -1220,25 +1221,26 @@ function renderBars(){
   fillBar(b,you==='w'?net.white:net.black,you);
 }
 function refreshUI(){
+  renderEmo();
   $('#bUndo').hidden=!!net||mode==='net';
-  $('#bResign').hidden=!(net&&net.status==='active');
+  $('#bResign').hidden=!(net&&net.you&&net.status==='active');
   $('#lvlSeg').hidden=mode!=='ai';
   const bn=$('#bNew');
-  bn.hidden=mode==='net'&&net&&net.status!=='done'&&!(net.status==='open'&&false);
+  bn.hidden=mode==='net'&&net&&net.you&&net.status!=='done';
   bn.textContent=mode==='net'?'Лоббиге қайту':'Жаңа ойын';
   $('#lvlSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.l===lvl));
   updateClaim();
 }
 function updateClaim(){
   const c=$('#bClaim');
-  c.hidden=!(net&&net.mode==='pvp'&&net.status==='active'&&!over&&turn!==net.you&&Date.now()-lastChange>125000);
+  c.hidden=!(net&&net.you&&net.mode==='pvp'&&net.status==='active'&&!over&&turn!==net.you&&Date.now()-lastChange>125000);
 }
 setInterval(updateClaim,5000);
 
 /* ---- server games ---- */
 function adoptNet(m){
   clearTimeout(pollT);
-  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0};
+  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0};
   lastChange=Date.now();
 }
 function netResync(m){
@@ -1254,6 +1256,7 @@ function netApply(m){
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
   net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;
+  if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
   if(was==='open'&&m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start')}
   renderBars();refreshUI();
@@ -1292,7 +1295,7 @@ function startPoll(){clearTimeout(pollT);if(net&&net.mode==='pvp')pollT=setTimeo
 async function pollOnce(){
   const n=net;
   if(!n||n.mode!=='pvp')return;
-  const r=await napi(null,'?id='+n.id+'&v='+n.ver);
+  const r=await napi(null,'?id='+n.id+'&v='+n.ver+'&c='+(n.cseq||0));
   if(net!==n)return;
   if(r.match)netApply(r.match);
   if(n.status==='done'){if(!n.award&&n.moves.length>=8&&n.tries++<4)startPoll();return}
@@ -1349,6 +1352,7 @@ function showLobby(kind){
   inp.onkeydown=e=>{if(e.key==='Enter')joinCode(inp.value)};
   row.append(inp,jb);
   card.append(q,c,row);
+  loadLive(card);
 }
 async function startPvp(action){
   const r=await napi({action});
@@ -1375,7 +1379,7 @@ async function newGame(){
   clearTimeout(pollT);
   if(mode==='net'){
     // back to the lobby (an unfinished game cannot be left from here)
-    if(net&&net.status!=='done')return;
+    if(net&&net.you&&net.status!=='done')return;
     net=null;resetLocal();setFlip(false);renderBars();showLobby('menu');refreshUI();return;
   }
   net=null;setFlip(false);resetLocal();hideLobby();
@@ -1414,6 +1418,66 @@ cv.addEventListener('pointerdown',e=>{
 });
 $('#sndBtn').addEventListener('click',()=>setMuted(!muted));
 setMuted(muted);
+
+
+/* ---------- emotes + spectating ---------- */
+const EMO=['Сәлем! 👋','Жақсы жүріс! 👏','Қиын екен 😮','Асықпа 😏','Қателестім 🙈','Тағы ойнаймыз ба? 🤝','🔥','😂','👏','😱'];
+function renderEmo(){
+  const box=$('#emobar');
+  const on=!!net&&net.mode==='pvp'&&net.status==='active'&&PL().isIn();
+  box.hidden=!on;
+  const key=on?(net.you?'p':'v'):'';
+  if(!on||box.dataset.k===key+net.id)return;
+  box.dataset.k=key+net.id;box.textContent='';
+  EMO.forEach((t,i)=>{
+    if(i<6&&!net.you)return;
+    const b=el('button','emo'+(i>=6?' big':''),t);b.type='button';
+    b.onclick=async()=>{
+      if(b.disabled)return;b.disabled=true;setTimeout(()=>b.disabled=false,1200);
+      const n=net;if(!n)return;
+      const r=await napi({action:'emote',id:n.id,e:i});
+      if(!r.ok)PL().toast('💬',r.error||'Жіберілмеді');
+      else if(net===n)pollOnce();
+    };
+    box.append(b);
+  });
+}
+function showEmote(c){
+  const st=$('#stage');if(!st||c.e==null||!EMO[c.e])return;
+  const mine=net&&net.you?c.s===net.you:c.s==='w';
+  const txt=EMO[c.e];
+  if(c.e>=6){
+    const d=el('div','efly',txt);d.style.left=(8+Math.random()*80)+'%';
+    if(c.u){const u=el('small','',c.u);d.append(u)}
+    st.append(d);setTimeout(()=>d.remove(),2400);
+  }else{
+    const d=el('div','ebub '+(mine?'me':'op'),txt);
+    st.append(d);setTimeout(()=>d.remove(),3800);
+    snd('select');
+  }
+}
+async function watchMatch(id){
+  const r=await napi(null,'?id='+encodeURIComponent(id));
+  const m=r.match;
+  if(!m||m.status==='open'){PL().toast('⚠️','Ойын табылмады');return}
+  if(m.status==='done'){startReplay(m.moves,m);return}
+  if(net&&net.you&&net.status==='active'){PL().toast('♟️','Алдымен өз ойыныңды аяқта');return}
+  setMode('net',true);
+  adoptNet(m);net.you=null;
+  hideLobby();resetLocal();setFlip(false);restoreFromMoves(m.moves);net.applied=m.moves.length;
+  renderBars();refreshUI();startPoll();
+  setStatus('Бақылаушы · '+NAME[turn]+' жүрісі',turn);
+  PL().toast('👁️','Тікелей көріп отырсың','Реакция жібере аласың');
+}
+async function loadLive(card){
+  const r=await PL().api('match?live=1');
+  if(!r.live||!r.live.length)return;
+  const h=el('h4','','🔴 Тікелей ойындар');card.append(h);
+  for(const g of r.live){
+    const b=el('button','btn ghost live',(g.wn||'?')+' ⚔ '+(g.bn||'?')+' · '+g.plies+' жүріс');
+    b.onclick=()=>watchMatch(g.id);card.append(b);
+  }
+}
 
 /* ---------- replay + share ---------- */
 const gameMoves=()=>net&&net.moves?net.moves.slice():locLog.slice();
@@ -1522,7 +1586,7 @@ $('#rpShare').addEventListener('click',shareGame);
 
 function setMode(m,quiet){
   if(rp){rp=null;$('#rpanel').hidden=true;$('#pbTop').hidden=$('#pbBot').hidden=true}
-  if(net&&net.mode==='pvp'&&net.status==='active'&&m!=='net'){PL().toast('♟️','Алдымен онлайн ойынды аяқта','«Берілу» батырмасы бар');return}
+  if(net&&net.you&&net.mode==='pvp'&&net.status==='active'&&m!=='net'){PL().toast('♟️','Алдымен онлайн ойынды аяқта','«Берілу» батырмасы бар');return}
   if(net&&net.mode==='pvp'&&net.status==='open'&&m!=='net'){napi({action:'cancel',id:net.id});net=null;clearTimeout(pollT)}
   if(net&&net.mode==='ai'&&m!=='ai')net=null;
   mode=m;
@@ -1581,7 +1645,7 @@ async function startup(){
   refreshUI();
   const P=PL();
   await P.ready;
-  const qp=new URLSearchParams(location.search),jp=qp.get('join'),rid=qp.get('replay');
+  const qp=new URLSearchParams(location.search),jp=qp.get('join'),rid=qp.get('replay'),wid=qp.get('watch');
   let resumed=false;
   if(P.isIn()){
     const r=await napi(null,'?active=1');
@@ -1601,6 +1665,7 @@ async function startup(){
     history.replaceState(null,'',location.pathname);
     if(P.isIn())joinCode(jp);else{P.toast('🔑','Ойынға қосылу үшін кіріңіз');P.login();const once=()=>{if(P.isIn()){joinCode(jp)}};P.onAuth(once,true)}
   }
+  if(wid){history.replaceState(null,'',location.pathname);await watchMatch(wid)}
   if(rid){
     history.replaceState(null,'',location.pathname);
     const r=await napi(null,'?id='+encodeURIComponent(rid));

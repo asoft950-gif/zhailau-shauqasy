@@ -32,13 +32,14 @@ async function who(id) {
   const r = await sql.query('SELECT id, username, avatar, role, rating FROM users WHERE id=$1', [id]);
   return r[0] || null;
 }
+const cseqOf = (m) => { const c = m.chat || []; return c.length ? c[c.length - 1].n : 0; };
 async function view(m, uid) {
   const [w, b] = await Promise.all([who(m.white_id), who(m.black_id)]);
   const you = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
   const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating };
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
-    moves: m.moves, turn: turnOf(m.moves), ver: m.ver, you, award: (you && m.awards && m.awards[you]) || null,
+    moves: m.moves, turn: turnOf(m.moves), ver: m.ver, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
@@ -91,11 +92,15 @@ export default async function handler(req, res) {
         const r = await sql.query("SELECT * FROM matches WHERE status IN ('active','open') AND (white_id=$1 OR black_id=$1) ORDER BY updated_at DESC LIMIT 1", [uid]);
         return send(res, 200, { match: r[0] ? await view(r[0], uid) : null });
       }
+      if (req.query?.live) {
+        const r = await sql.query("SELECT m.id, jsonb_array_length(m.moves) AS plies, w.username AS wn, b.username AS bn, w.rating AS wr, b.rating AS br FROM matches m JOIN users w ON w.id=m.white_id JOIN users b ON b.id=m.black_id WHERE m.mode='pvp' AND m.status='active' AND m.updated_at > now() - interval '3 minutes' ORDER BY m.updated_at DESC LIMIT 8");
+        return send(res, 200, { live: r });
+      }
       const m = await load(Number(req.query?.id));
       if (!m) return send(res, 404, { error: 'Ойын табылмады' });
       const seat = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
       if (seat && m.status !== 'done') sql.query(`UPDATE matches SET seen_${seat}=now() WHERE id=$1`, [m.id]).catch(() => {});
-      if (req.query?.v !== undefined && Number(req.query.v) === m.ver) return send(res, 200, { same: true, ver: m.ver });
+      if (req.query?.v !== undefined && Number(req.query.v) === m.ver && Number(req.query.c || 0) === cseqOf(m)) return send(res, 200, { same: true, ver: m.ver });
       return send(res, 200, { match: await view(m, uid) });
     }
     if (req.method !== 'POST' || !needJson(req)) return send(res, 405, { error: 'method' });
@@ -104,6 +109,18 @@ export default async function handler(req, res) {
     if (!bn.length || bn[0].banned) return send(res, 403, { error: 'Аккаунт бұғатталған' });
     const b = req.body || {};
 
+    if (b.action === 'emote') {
+      if (await limited(req, 'emote' + uid, 25, 30)) return send(res, 429, { error: 'Тым жиі' });
+      const m = await load(Number(b.id)), e = Number(b.e);
+      if (!m || m.status !== 'active' || m.mode !== 'pvp' || !Number.isInteger(e) || e < 0 || e > 9) return send(res, 400, { error: 'Қате' });
+      const side = m.white_id === uid ? 'w' : m.black_id === uid ? 'b' : 'v';
+      if (side === 'v' && e < 6) return send(res, 403, { error: 'Көрермен тек реакция жібере алады' });
+      const uname = side === 'v' ? ((await who(uid)) || {}).username || '' : '';
+      await sql.query(
+        "UPDATE matches SET chat = (CASE WHEN jsonb_array_length(chat) >= 20 THEN chat - 0 ELSE chat END) || jsonb_build_array(jsonb_build_object('n', COALESCE((chat->-1->>'n')::int, 0) + 1, 's', $2::text, 'e', $3::int, 'u', $4::text)) WHERE id=$1",
+        [m.id, side, e, uname]);
+      return send(res, 200, { ok: true });
+    }
     if (b.action === 'ai') {
       if (await limited(req, 'newai', 40, 600)) return send(res, 429, { error: 'Тым жиі' });
       await abandonOwnAi(uid); await cancelOwnOpen(uid);
