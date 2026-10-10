@@ -119,3 +119,12 @@
 .lobby{overflow-y:auto;overscroll-behavior:contain;place-items:start center}
 .lcard{margin:auto 0}
 .lobby{display:flex;justify-content:center;align-items:flex-start}
+
+.clform{display:grid;gap:8px;margin:8px 0}
+.embs{display:flex;flex-wrap:wrap;gap:6px}
+.emb{font-size:1.3rem;padding:4px 8px;border-radius:10px;border:2px solid transparent;background:var(--card,#fff8);cursor:pointer}
+.emb.on{border-color:var(--gold-d,#c9962b)}
+.cemb{font-size:1.6rem;width:40px;text-align:center}.cemb.big{font-size:2.2rem;width:54px}
+.chead{display:flex;align-items:center;gap:8px}
+.cchat{max-height:180px;overflow-y:auto;border:2px solid var(--gold-d,#c9962b);border-radius:12px;padding:8px 10px;margin:6px 0;display:grid;gap:4px;font-size:.88rem}
+.cchat p{margin:0;overflow-wrap:anywhere}

@@ -122,7 +122,7 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['fr','Достар'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
@@ -133,6 +133,7 @@ async function profileView(t){
   else if(tab==='ach')renderAch(body);
   else if(tab==='daily')renderDaily(body);
   else if(tab==='fr')await renderFriends(body);
+  else if(tab==='clan')await renderClan(body);
   else if(tab==='shop')renderShop(body);
   else if(tab==='cup')await renderCup(body,cupP);
   else if(tab==='top')await renderTop(body);
@@ -225,6 +226,56 @@ async function renderFriends(b){
     b.append(el('h2','','Жіберілген сұраныстар'));
     for(const u of r.outgoing){const li=mk(u,'жауап күтілуде');const c=el('button','btn ghost sm','✕');c.setAttribute('aria-label','Болдырмау');c.onclick=()=>act('cancel',u.id);li.append(c);b.append(li)}
   }
+}
+async function renderClan(b){
+  const r=await api('clans');
+  if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
+  const again=()=>profileView('clan');
+  const call=async(body,msg)=>{const x=await api('clans',{method:'POST',body});if(x.ok){if(msg)toast('🛡️',msg);if(typeof x.coins==='number'){me.coins=x.coins;renderBtn()}await again()}else toast('⚠️',x.error||'Қате');return x};
+  const c=r.mine;
+  if(!c){
+    b.append(el('p','xpt','Клан — достардың тобы: ортақ чат және ортақ рейтинг. Ашу құны: 🪙 '+r.cost+' (сенде '+r.coins+'). Бар кланға қосылу тегін.'));
+    const f=el('div','clform');
+    const nm=el('input');nm.placeholder='Клан аты';nm.maxLength=20;nm.setAttribute('aria-label','Клан аты');
+    const tg=el('input');tg.placeholder='ТЕГ';tg.maxLength=4;tg.setAttribute('aria-label','Клан тегі');
+    const ds=el('input');ds.placeholder='Қысқаша сипаттама';ds.maxLength=120;ds.setAttribute('aria-label','Сипаттама');
+    let emb=r.emblems[0];const eb=el('div','embs');
+    for(const e of r.emblems){const x=el('button','emb'+(e===emb?' on':''),e);x.type='button';x.onclick=()=>{emb=e;eb.querySelectorAll('.emb').forEach(y=>y.classList.toggle('on',y===x))};eb.append(x)}
+    const mkb=el('button','btn','Клан ашу · 🪙 '+r.cost);mkb.disabled=r.coins<r.cost;
+    mkb.onclick=()=>{mkb.disabled=true;call({action:'create',name:nm.value,tag:tg.value,emblem:emb,descr:ds.value},'Клан ашылды!').then(x=>{if(!x.ok)mkb.disabled=false})};
+    f.append(nm,tg,ds,eb,mkb);b.append(f);
+    b.append(el('h2','','Үздік кландар'));
+    if(!r.top.length)b.append(el('p','xpt','Әзірше клан жоқ. Бірінші боласың ба?'));
+    r.top.forEach((k,i)=>{
+      const li=el('div','fitem');li.append(el('span','cemb',k.emblem));
+      const w=el('div','fn');w.append(el('b','','#'+(i+1)+' ['+k.tag+'] '+k.name),el('span','',k.n+'/'+k.max+' · күш '+k.power+(k.descr?' · '+k.descr:'')));li.append(w);
+      if(k.n<k.max){const j=el('button','btn sm','Қосылу');j.onclick=()=>{j.disabled=true;call({action:'join',id:k.id},k.name+' кланына қосылдың')};li.append(j)}
+      b.append(li);
+    });
+    return;
+  }
+  const hd=el('div','chead');hd.append(el('span','cemb big',c.emblem));
+  const t=el('div','fn');t.append(el('b','','['+c.tag+'] '+c.name),el('span','',c.members.length+'/'+c.max+' ойыншы · күш '+c.power));hd.append(t);b.append(hd);
+  if(c.descr)b.append(el('p','xpt',c.descr));
+  b.append(el('h2','','Мүшелер'));
+  for(const m of c.members){
+    const li=el('div','fitem');li.append(avatarCanvas(m.avatar,'fav'));
+    const w=el('div','fn');w.append(el('b','',m.name+(m.role==='leader'?' 👑':'')),el('span','',(m.online?'🟢 ':'⚪ ')+m.rating));li.append(w);
+    if(c.you==='leader'&&m.role!=='leader'){let armed=0;const k=el('button','btn ghost sm','✕');k.setAttribute('aria-label','Шығару');k.onclick=()=>{if(!armed){armed=1;k.textContent='?';setTimeout(()=>{armed=0;k.textContent='✕'},2500);return}call({action:'kick',id:m.id},m.name+' шығарылды')};li.append(k)}
+    b.append(li);
+  }
+  b.append(el('h2','','Клан чаты'));
+  const box=el('div','cchat');
+  if(!c.msgs.length)box.append(el('p','xpt','Әзірше хабар жоқ.'));
+  for(const m of c.msgs){const p=el('p','');p.append(el('b','',m.name+': '),document.createTextNode(m.text));box.append(p)}
+  b.append(box);requestAnimationFrame(()=>{box.scrollTop=box.scrollHeight});
+  const row=el('div','frow');const inp=el('input');inp.placeholder='Хабар жаз…';inp.maxLength=200;inp.setAttribute('aria-label','Хабар');
+  const sb=el('button','btn','↵');sb.setAttribute('aria-label','Жіберу');
+  const say=async()=>{const text=inp.value.trim();if(!text)return;sb.disabled=true;const x=await api('clans',{method:'POST',body:{action:'say',text}});sb.disabled=false;if(x.ok)await again();else toast('⚠️',x.error||'Қате')};
+  sb.onclick=say;inp.onkeydown=e=>{if(e.key==='Enter')say()};row.append(inp,sb);b.append(row);
+  let armed=0;const lv=el('button','btn ghost',c.you==='leader'&&c.members.length===1?'Кланды жою':'Кланнан шығу');
+  lv.onclick=()=>{if(!armed){armed=1;lv.textContent='Растау?';setTimeout(()=>{armed=0;lv.textContent=c.you==='leader'&&c.members.length===1?'Кланды жою':'Кланнан шығу'},2500);return}call({action:'leave'},'Кланнан шықтың')};
+  b.append(lv);
 }
 function left(iso){const ms=new Date(iso)-Date.now();const h=Math.max(0,Math.floor(ms/3600e3)),m=Math.max(0,Math.floor(ms%3600e3/60e3));return h+' сағ '+m+' мин'}
 async function patchMe(body){const r=await api('me',{method:'PATCH',body});return r}
