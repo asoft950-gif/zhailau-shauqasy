@@ -1,6 +1,6 @@
 /* Network-first for the app shell (so updates arrive immediately), cached copy only as offline fallback. API is never cached. */
-const C = 'zh-shell-v3';
-const SHELL = ['/', '/platform.css', '/theme.css', '/platform.js', '/engine.js', '/skins.js', '/engine-worker.js'];
+const C = 'zh-shell-v4';
+const SHELL = ['/', '/platform.css', '/theme.css', '/meadow.css', '/platform.js', '/engine.js', '/skins.js', '/engine-worker.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).catch(() => {})); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
