@@ -32,6 +32,9 @@ export default async function handler(req, res) {
       }
       if (b.bio !== undefined) await sql.query('UPDATE users SET bio=$1 WHERE id=$2', [String(b.bio).slice(0, 140), uid]);
     }
+    /* creator: unlimited coins, every skin, every campaign stage, every achievement (for testing) */
+    const cr = await sql.query("UPDATE users SET coins=GREATEST(coins,900000000), camp=GREATEST(camp,$2), skins=jsonb_set(jsonb_set(skins,'{own}',$3::jsonb),'{pown}',$4::jsonb) WHERE id=$1 AND role='creator' AND NOT banned RETURNING id", [uid, CAMP.length, JSON.stringify(Object.keys(SHOP)), JSON.stringify(Object.keys(PSKINS))]);
+    if (cr.length) await sql.query('INSERT INTO achievements (user_id,key) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING', [uid, Object.keys(ACH)]);
     const u = (await sql.query(
       `SELECT id, username, role, banned, avatar, bio, games, wins, losses, draws, captures, streak, best_streak, rating, xp, coins, skins, camp, created_at,
         (SELECT count(*)+1 FROM users x WHERE x.rating > users.rating) AS rank
