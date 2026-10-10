@@ -197,3 +197,20 @@ body.finale .sky{filter:brightness(.7) saturate(1.2)}
 .dlg .tabs,#dlg .tabs{overflow-x:auto;scrollbar-width:none}
 #dlg .tabs::-webkit-scrollbar{display:none}
 #dlg .tabs button{flex:0 0 auto;padding:9px 14px;white-space:nowrap}
+
+/* ---- clock, campaign, modes ---- */
+.ck{font:800 1.05rem/1 var(--font-display,inherit);font-variant-numeric:tabular-nums;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,.08);margin-left:auto;margin-right:8px}
+.ck.run{background:#2b1a05;color:#FFE9A3}
+.ck.low{background:#c62828;color:#fff;animation:ckp .6s infinite alternate}
+@keyframes ckp{to{transform:scale(1.08)}}
+.pbar{display:flex;align-items:center}
+.tcseg{justify-self:center}
+.tcseg button{padding:6px 12px;min-height:36px;font-size:.85rem}
+.cmap{width:min(100%,360px)}
+.cstages{display:grid;gap:6px;max-height:46vh;overflow:auto;text-align:left}
+.cst{display:flex;align-items:center;gap:10px;border:2px solid var(--gold-d);background:var(--panel);color:var(--fg);border-radius:14px;padding:8px 10px;cursor:pointer;font:inherit}
+.cst.done{opacity:.75}.cst.lock{opacity:.45;cursor:default}
+.cst.open{background:linear-gradient(180deg,#ffe79a,#f2c24b);color:#3b2705;box-shadow:0 3px 0 rgba(122,75,0,.4)}
+.cst .cn{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.12);font-weight:800;flex:none}
+.cst .cw{display:grid;gap:1px}.cst .cw small{opacity:.8}
+@media(max-width:560px){.seg button{padding:8px 9px;font-size:.82rem}}

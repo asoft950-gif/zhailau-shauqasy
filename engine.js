@@ -174,8 +174,9 @@ export function gameStatus(b, turn) {
   return { over: false, winner: null, checked, moves, reason: '' };
 }
 /* difficulty: 1 easy (shallow + mistakes), 2 medium, 3 hard */
-export function pickMove(b, col, level) {
+export function pickMove(b, col, level, noise = 0) {
   const lv = level === 1 || level === 2 ? level : 3;
+  if (noise > 0 && Math.random() < noise) { const ms = legal(b, col); if (ms.length) return ms[Math.floor(Math.random() * ms.length)]; }
   if (lv === 1) {
     const ms = legal(b, col);
     if (!ms.length) return null;

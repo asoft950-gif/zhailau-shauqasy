@@ -1,4 +1,4 @@
-import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, SHOP, PSKINS, unlockedPieceSkins } from './_lib.js';
+import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, SHOP, PSKINS, unlockedPieceSkins, CAMP } from './_lib.js';
 
 export default async function handler(req, res) {
   try {
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
       if (b.bio !== undefined) await sql.query('UPDATE users SET bio=$1 WHERE id=$2', [String(b.bio).slice(0, 140), uid]);
     }
     const u = (await sql.query(
-      `SELECT id, username, role, banned, avatar, bio, games, wins, losses, draws, captures, streak, best_streak, rating, xp, coins, skins, created_at,
+      `SELECT id, username, role, banned, avatar, bio, games, wins, losses, draws, captures, streak, best_streak, rating, xp, coins, skins, camp, created_at,
         (SELECT count(*)+1 FROM users x WHERE x.rating > users.rating) AS rank
        FROM users WHERE id=$1`, [uid]))[0];
     if (!u || u.banned) return send(res, 200, { user: null });
@@ -43,6 +43,6 @@ export default async function handler(req, res) {
     const daily = await dailyFor(uid);
     const medals = await sql.query('SELECT period_key, place FROM season_awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30', [uid]);
     const punlocked = await unlockedPieceSkins({ id: uid, role: u.role, skins: u.skins });
-    send(res, 200, { daily, medals, pshop: PSKINS, punlocked, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
+    send(res, 200, { campaign: CAMP, daily, medals, pshop: PSKINS, punlocked, shop: SHOP, user: { ...u, level: levelOf(u.xp), xpNext: Math.pow(levelOf(u.xp), 2) * 50 }, achievements: ach, history: hist, catalog: ACH });
   } catch (e) { console.error(e); send(res, 500, { error: 'Сервер қатесі' }); }
 }

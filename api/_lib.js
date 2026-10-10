@@ -85,7 +85,12 @@ export const ACH = {
   hunter_50:   { name: 'Аңшы', desc: 'Барлығы 50 жауды қағып алу', icon: '🎯' },
   creator:     { name: 'Жайлау жаратушысы', desc: 'Осы ойынның Создателі', icon: '🌄' },
   pvp_win:     { name: 'Адамды жеңдің', desc: 'Онлайн ойында шын ойыншыны жеңу', icon: '🌐' },
-  rating_1200: { name: 'Шебер', desc: 'Рейтинг 1200-ге жету', icon: '⭐' }
+  rating_1200: { name: 'Шебер', desc: 'Рейтинг 1200-ге жету', icon: '⭐' },
+  camp_3:      { name: 'Жорық басталды', desc: 'Батыр жорығының 3-деңгейін өту', icon: '🏹' },
+  camp_5:      { name: 'Жорық жартысы', desc: 'Батыр жорығының 5-деңгейін өту', icon: '🛡️' },
+  camp_7:      { name: 'Дала көсемі', desc: 'Батыр жорығының 7-деңгейін өту', icon: '🐎' },
+  camp_10:     { name: 'Қара Хан жеңілді', desc: 'Батыр жорығын толық өту', icon: '🏔️' },
+  puzzle_1:    { name: 'Жұмбақшы', desc: 'Күнделікті жұмбақты шешу', icon: '🧩' }
 };
 export function earned(u, g, had) {
   const out = [];
@@ -183,11 +188,39 @@ export async function claimQuest(uid, key) {
 /* ---------- piece skins ---------- */
 export const PSKINS = {
   classic: { price: 0 }, beast: { price: 0 },
-  heroes: { price: 500, ach: 'wins_10' }, alien: { price: 600, ach: 'pvp_win' }, space: { price: 700, ach: 'streak_5' },
-  dark: { price: 800, ach: 'wins_25' }, light: { price: 800, ach: 'rating_1200' }
+  heroes: { price: 500, ach: ['wins_10', 'camp_3'] }, alien: { price: 600, ach: ['pvp_win', 'camp_5'] }, space: { price: 700, ach: ['streak_5', 'camp_7'] },
+  dark: { price: 800, ach: ['wins_25', 'camp_10'] }, light: { price: 800, ach: ['rating_1200', 'puzzle_1'] }
 };
 export async function unlockedPieceSkins(u) {
   const have = new Set((u.skins && u.skins.pown) || []);
   const ach = new Set((await sql.query('SELECT key FROM achievements WHERE user_id=$1', [u.id])).map(r => r.key));
-  return Object.keys(PSKINS).filter(k => PSKINS[k].price === 0 || have.has(k) || u.role === 'creator' || (PSKINS[k].ach && ach.has(PSKINS[k].ach)));
+  return Object.keys(PSKINS).filter(k => PSKINS[k].price === 0 || have.has(k) || u.role === 'creator' || (PSKINS[k].ach && PSKINS[k].ach.some(a => ach.has(a))));
+}
+
+/* ---------- Batyr campaign ---------- */
+export const CAMP = [
+  { title: 'Ұры бекінісі', story: 'Ауылға ұрылар түсті. Жас жауынгер, алғашқы шайқасың осы!', level: 1, noise: 0.6, reward: 20 },
+  { title: 'Қасқыр аулау', story: 'Түнде қасқырлар отарға тиді. Жолын кес.', level: 1, noise: 0.4, reward: 25 },
+  { title: 'Құм дауылы', story: 'Дауылдың ішінде жау жасырынған. Көзіңді аш.', level: 1, noise: 0.2, reward: 30 },
+  { title: 'Тау асуы', story: 'Асудағы күзетшілер өткізбейді. Ақылмен жең.', level: 2, noise: 0.35, reward: 35 },
+  { title: 'Күзет қамалы', story: 'Қамал қабырғасы биік, бірақ әр қамалдың әлсіз жері бар.', level: 2, noise: 0.15, reward: 50 },
+  { title: 'Түнгі шабуыл', story: 'Жау түнде шабады. Батырың қауіпте болмасын.', level: 2, noise: 0, reward: 50 },
+  { title: 'Қара жылқышылар', story: 'Жел сияқты шапқан атты әскер. Жылдамырақ ойлан.', level: 3, noise: 0.25, reward: 60 },
+  { title: 'Көсем сайысы', story: 'Көшпенділердің көсемі сені сайысқа шақырады.', level: 3, noise: 0.1, reward: 70 },
+  { title: 'Орда қақпасы', story: 'Ордаға жететін соңғы қақпа. Бір қателік жеткілікті.', level: 3, noise: 0, reward: 80 },
+  { title: 'Қара Хан', story: 'Жайлауды тартып алған Қара Ханмен соңғы шайқас. Халық саған сенеді!', level: 3, noise: 0, reward: 150 }
+];
+export async function campaignWin(uid, stage) {
+  const c = CAMP[stage - 1];
+  if (!c) return null;
+  const r = await sql.query('UPDATE users SET camp=$2, coins=coins+$3 WHERE id=$1 AND camp<$2 RETURNING camp', [uid, stage, c.reward]);
+  if (!r.length) return { stage, first: false, coins: 0, ach: [] };
+  const ach = [];
+  for (const [k, s] of [['camp_3', 3], ['camp_5', 5], ['camp_7', 7], ['camp_10', 10]]) {
+    if (stage >= s) {
+      const x = await sql.query('INSERT INTO achievements (user_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING key', [uid, k]);
+      if (x.length) ach.push(k);
+    }
+  }
+  return { stage, first: true, coins: c.reward, ach };
 }

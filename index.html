@@ -107,6 +107,8 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
       <button id="mAi" aria-pressed="true">Бот</button>
       <button id="mNet" aria-pressed="false">Онлайн</button>
       <button id="mTwo" aria-pressed="false">Екеуміз</button>
+      <button id="mCamp" aria-pressed="false">Жорық</button>
+      <button id="mPuz" aria-pressed="false">Жұмбақ</button>
     </div>
   </div>
   <div class="seg lvl" id="lvlSeg" role="group" aria-label="Бот деңгейі">
@@ -565,7 +567,8 @@ let pskin={w:'beast',b:'beast'};
 const skO=c=>SKS[pskin[c]]||SKS.beast;
 const palO=c=>skO(c).pal[c],scO=(c,t)=>(skO(c).sc&&skO(c).sc[t])||SC[t],drawO=(c,t)=>skO(c).draw[t];
 const NM=(c,t)=>{const k=skO(c);return k.names?k.names[t]:INFO[t].name};
-let locLog=[],rp=null;
+let locLog=[],rp=null,campStage=0,segMode='ai',tcSel=0,pz=null;
+try{tcSel=[0,180,300,600].includes(+localStorage.tc)?+localStorage.tc:0}catch(e){}
 let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
 let hist=[],lost={w:[],b:[]},parts=[],shake=0,time=0,gen=0,idc=1;
 const odata={t:0,id:0,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false};
@@ -1053,10 +1056,13 @@ function afterMove(silent){
   setHint(sel>=0?board[sel]:null);
 }
 function showResult(){
-  if(rp){$('#result').hidden=true;return}
-  const R={mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
+  if(rp||mode==='puz'){$('#result').hidden=true;return}
+  const R={time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
   let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
+  const cw=campStage&&winner==='w'&&net&&net.you==='w';
+  if(cw)t='Жорық: '+campStage+'-деңгей өтті! 🏆';
+  $('#resBtn').textContent=cw?'Жорық картасы':campStage?'Қайта ойнау':'Қайта ойнау';
   $('#resT').textContent=t;
   const rs=net&&net.reason?net.reason:(winner?'mate':(checked?'':'stalemate'));
   $('#resS').textContent=R[rs]||'';
@@ -1212,6 +1218,7 @@ function restoreFromMoves(moves){
 }
 function canAct(){
   if(rp)return false;
+  if(mode==='puz')return !!pz&&!pz.done&&turn==='w';
   if(net)return net.status==='active'&&turn===net.you;
   if(mode==='net')return false;
   return mode==='ai'?turn==='w':true;
@@ -1228,8 +1235,24 @@ function fillBar(box,info,c){
   w.append(el('b','',(info.name||'?')+(info.role==='creator'?' 👑':'')));
   w.append(el('span','',info.bot?'компьютер':(info.rating?'рейтинг '+info.rating:'')));
   const d=el('i','pd');d.style.background=c==='w'?'#F2C94C':'#5560D6';
-  box.append(w,d);
+  box.append(w);
+  if(net&&net.tc){const k=el('b','ck','--:--');k.dataset.c=c;box.append(k)}
+  box.append(d);
 }
+const fmtClk=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+let clkPoll=0;
+function tickClock(){
+  if(!net||!net.tc||!net.clk)return;
+  const act=net.status==='active'&&!over;
+  const el_=performance.now()-net.clk.at;
+  for(const k of document.querySelectorAll('.ck')){
+    const c=k.dataset.c;let ms=net.clk[c]-(act&&c===net.clk.turn?el_:0);
+    k.textContent=fmtClk(ms);k.classList.toggle('low',ms<10000&&ms>0);
+    k.classList.toggle('run',act&&c===net.clk.turn);
+    if(act&&ms<=0&&c===net.clk.turn&&Date.now()-clkPoll>1200){clkPoll=Date.now();pollOnce()}
+  }
+}
+setInterval(tickClock,200);
 function renderBars(){
   const t=$('#pbTop'),b=$('#pbBot');
   if(!net){t.hidden=b.hidden=true;return}
@@ -1240,12 +1263,12 @@ function renderBars(){
 function refreshUI(){
   applyPSkins();
   renderEmo();
-  $('#bUndo').hidden=!!net||mode==='net';
+  $('#bUndo').hidden=!!net||mode==='net'||mode==='puz';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
-  $('#lvlSeg').hidden=mode!=='ai';
+  $('#lvlSeg').hidden=mode!=='ai'||campStage>0;
   const bn=$('#bNew');
   bn.hidden=mode==='net'&&net&&net.you&&net.status!=='done';
-  bn.textContent=mode==='net'?'Лоббиге қайту':'Жаңа ойын';
+  bn.textContent=mode==='net'?'Лоббиге қайту':mode==='puz'?'Бастан':campStage?'Қайта':'Жаңа ойын';
   $('#lvlSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.l===lvl));
   updateClaim();
 }
@@ -1258,8 +1281,13 @@ setInterval(updateClaim,5000);
 /* ---- server games ---- */
 function adoptNet(m){
   clearTimeout(pollT);
-  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0};
+  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0};
+  setClk(m);
   lastChange=Date.now();
+}
+function setClk(m){
+  if(!net||!m.clock){if(net)net.clk=null;return}
+  net.clk={w:m.clock.cw,b:m.clock.cb,turn:m.turn,at:performance.now()};
 }
 function netResync(m){
   if(!net)return;
@@ -1274,6 +1302,7 @@ function netApply(m){
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
   net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;
+  setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
   if(was==='open'&&m.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start')}
@@ -1306,6 +1335,7 @@ function finishNet(){
     net.awardShown=true;
     PL().showAward(net.award,net.winner===null?'draw':net.winner===net.you?'win':'loss');
   }
+  campAwardToast();
   renderBars();refreshUI();
   if(net.mode==='pvp'&&!net.award&&net.moves.length>=8&&net.tries<4)startPoll();
 }
@@ -1330,6 +1360,7 @@ async function netSend(mv){
   if(net===n&&q.match){while(busy)await wait(60);netResync(q.match);netApply(q.match)}
 }
 function humanMove(mv){
+  if(mode==='puz'){puzMove(mv);return}
   playMove(mv);
   if(net){snd('send');netSend(mv)}
 }
@@ -1361,6 +1392,13 @@ function showLobby(kind){
     return;
   }
   card.append(el('h3','','Онлайн ойын'),el('p','','Нақты ойыншымен ойна, рейтингің көтеріледі.'));
+  const tcs=el('div','seg tcseg');tcs.setAttribute('role','group');tcs.setAttribute('aria-label','Уақыт');
+  for(const [v,l] of [[180,'3 мин'],[300,'5 мин'],[600,'10 мин'],[0,'∞']]){
+    const x=el('button','',l);x.type='button';x.setAttribute('aria-pressed',v===tcSel);
+    x.onclick=()=>{tcSel=v;try{localStorage.tc=v}catch(e){}tcs.querySelectorAll('button').forEach(y=>y.setAttribute('aria-pressed',y===x))};
+    tcs.append(x);
+  }
+  card.append(tcs);
   const q=el('button','btn','⚡ Жылдам ойын');q.onclick=()=>startPvp('quick');
   const c=el('button','btn ghost','🤝 Дос шақыру');c.onclick=()=>startPvp('create');
   const row=el('div','jrow');
@@ -1373,7 +1411,7 @@ function showLobby(kind){
   loadLive(card);
 }
 async function startPvp(action){
-  const r=await napi({action});
+  const r=await napi({action,tc:tcSel});
   if(!r.match){PL().toast('⚠️',r.error||'Қате');return}
   openPvp(r.match,action==='create');
 }
@@ -1395,6 +1433,8 @@ function openPvp(m,showCode){
 /* ---- flow ---- */
 async function newGame(){
   clearTimeout(pollT);
+  if(mode==='puz'){startPuzzle();return}
+  if(mode==='ai'&&campStage){startCamp(campStage);return}
   if(mode==='net'){
     // back to the lobby (an unfinished game cannot be left from here)
     if(net&&net.you&&net.status!=='done')return;
@@ -1540,7 +1580,7 @@ function startReplay(moves,info){
   if(net&&net.mode==='pvp'&&net.status==='active')return;
   rp={moves,k:0,auto:false,run:0,white:info&&info.white,black:info&&info.black,id:info&&info.id};
   mode='replay';net=null;setFlip(false);
-  ['mAi','mNet','mTwo'].forEach(i=>$('#'+i).setAttribute('aria-pressed','false'));
+  ['mAi','mNet','mTwo','mCamp','mPuz'].forEach(i=>$('#'+i).setAttribute('aria-pressed','false'));
   resetLocal();hideLobby();
   $('#result').hidden=true;$('#rpanel').hidden=false;$('#lvlSeg').hidden=true;
   rp.run=0;rpBars();rpShow();
@@ -1612,15 +1652,147 @@ window.__openPvp=m=>{if(net&&net.you&&net.mode==='pvp'&&net.status==='active'){P
 window.__watch=id=>watchMatch(id);
 $('#rpShare').addEventListener('click',shareGame);
 
+
+/* ---------- Batyr campaign ---------- */
+async function showCampMap(){
+  const L=$('#lobby');L.textContent='';L.hidden=false;
+  const card=el('div','lcard cmap');L.append(card);
+  if(!PL().isIn()){
+    card.append(el('h3','','Батыр жорығы'),el('p','','Жорыққа шығу үшін алдымен кіру керек.'));
+    const b=el('button','btn','Кіру / Тіркелу');b.onclick=()=>PL().login();card.append(b);return;
+  }
+  card.append(el('h3','','Батыр жорығы'),el('p','','10 шайқас: бот күшейе береді.'));
+  const r=await PL().api('me');
+  if(!r.user||!r.campaign){card.append(el('p','err','Қате'));return}
+  const done=r.user.camp||0;
+  const list=el('div','cstages');
+  r.campaign.forEach((c,i)=>{
+    const n=i+1,st=n<=done?'done':n===done+1?'open':'lock';
+    const b=el('button','cst '+st);b.type='button';b.disabled=st==='lock';
+    b.append(el('span','cn',st==='done'?'✓':st==='lock'?'🔒':String(n)));
+    const w=el('span','cw');w.append(el('b','',c.title),el('small','',st==='lock'?'Алдыңғыны өт':'🪙 '+c.reward));b.append(w);
+    b.onclick=()=>campIntro(n,c);
+    list.append(b);
+  });
+  card.append(list);
+  if(done>=10)card.append(el('p','','🏔️ Жорық толық өтілді! Сен — Жайлау батырысың.'));
+}
+function campIntro(n,c){
+  const L=$('#lobby');L.textContent='';
+  const card=el('div','lcard');L.append(card);
+  card.append(el('h3','',n+'-деңгей · '+c.title),el('p','',c.story));
+  card.append(el('p','',(['Оңай','Оңай','Оңай','Орташа','Орташа','Орташа','Қиын','Қиын','Қиын','Қиын'][n-1])+' қарсылас · сыйлық: 🪙 '+c.reward));
+  const go=el('button','btn','⚔ Шайқасқа!');go.onclick=()=>startCamp(n);
+  const bk=el('button','btn ghost','Артқа');bk.onclick=showCampMap;
+  card.append(go,bk);
+}
+async function startCamp(n){
+  clearTimeout(pollT);
+  if(net&&net.you&&net.mode==='pvp'&&net.status==='active'){PL().toast('♟️','Алдымен онлайн ойынды аяқта');return}
+  mode='ai';segMode='camp';campStage=n;net=null;pz=null;
+  setFlip(false);resetLocal();hideLobby();
+  syncSeg();
+  const g=gen;busy=true;setStatus('Жорық дайындалуда…','w');
+  const r=await napi({action:'ai',camp:n});
+  if(g!==gen)return;
+  busy=false;
+  if(!r.match){PL().toast('⚠️',r.error||'Қате');campStage=0;showCampMap();return}
+  adoptNet(r.match);
+  setStatus(n+'-деңгей · Сенің жүрісің','w');
+  renderBars();refreshUI();
+}
+function campAwardToast(){
+  const a=net&&net.award&&net.award.camp;if(!a||net.campShown)return;net.campShown=true;
+  if(a.first)PL().toast('🏹',a.stage+'-деңгей өтті!','+'+a.coins+' тиын'+(a.ach&&a.ach.length?' · жаңа жетістік!':''),null,6000);
+  else PL().toast('🏹',a.stage+'-деңгей қайта өтілді','Тиын тек алғашқы рет беріледі');
+}
+
+/* ---------- daily puzzle (mate in 2) ---------- */
+const PZ_TXT='Жұмбақ: ақ жүреді, 2 жүріспен мат қой';
+async function startPuzzle(){
+  clearTimeout(pollT);
+  if(net&&net.you&&net.mode==='pvp'&&net.status==='active'){PL().toast('♟️','Алдымен онлайн ойынды аяқта');return}
+  mode='puz';segMode='puz';campStage=0;net=null;
+  setFlip(false);resetLocal();hideLobby();syncSeg();
+  busy=true;setStatus('Жұмбақ жүктелуде…','w');
+  const g=gen,r=await PL().api('puzzle');
+  if(g!==gen)return;
+  busy=false;
+  if(!r.board){setStatus('Жұмбақ жүктелмеді','w');PL().toast('⚠️',r.error||'Қате');return}
+  board=r.board.map((p,i)=>p?mk(p.t,p.c,0,i):null);
+  idc=100;turn='w';last=null;lost={w:[],b:[]};hist=[];locLog=[];
+  pz={n:r.n,solved:r.solved,moves:[],stage:0,tries:0,reward:r.reward,done:false};
+  $('#result').hidden=true;
+  afterMove(true);
+  setStatus(PZ_TXT+' · №'+r.n+(r.solved?' ✅':''),'w');
+  renderBars();refreshUI();
+}
+async function puzMove(mv){
+  const p=pz;if(!p||p.done)return;
+  const mvo={f:mv.f,t:mv.t};
+  if(p.stage===0){
+    busy=true;
+    const r=await PL().api('puzzle',{method:'POST',body:{step:1,m1:mvo}});
+    busy=false;
+    if(pz!==p)return;
+    if(!r.good){p.tries++;sel=-1;selMoves=[];setStatus('Бұл жүріс матқа әкелмейді. Тағы ойлан ('+p.tries+')','w');snd('check');shake=Math.max(shake,.5);setTimeout(()=>{if(pz===p&&!p.done)setStatus(PZ_TXT+' · №'+p.n,'w')},2200);return}
+    p.moves.push(mvo);
+    await playMove(mv);
+    if(pz!==p)return;
+    if(r.done||over){return puzSolved(p)}
+    p.stage=1;
+    if(r.reply){
+      await wait(350);
+      p.moves.push(r.reply);
+      await playMove({f:r.reply.f,t:r.reply.t,promo:legal(board,'b').find(x=>x.f===r.reply.f&&x.t===r.reply.t)?.promo});
+      if(pz!==p)return;
+    }
+    setStatus('Енді мат қой!','w');
+    return;
+  }
+  // second move: must mate
+  const pre=snap();
+  await playMove(mv);
+  if(pz!==p)return;
+  if(over&&winner==='w'){p.moves.push(mvo);return puzSolved(p)}
+  // not mate: take it back
+  p.tries++;
+  hist.pop();restoreSnap(pre);
+  setStatus('Мат емес. Тағы бір рет ойлан','w');
+}
+async function puzSolved(p){
+  p.done=true;
+  const r=await PL().api('puzzle',{method:'POST',body:{step:2,moves:p.moves}});
+  setStatus('Шештің! 🎉','w');document.body.classList.add('finale');
+  $('#resT').textContent='Жұмбақ шешілді! 🧩';
+  $('#resS').textContent=r.good?(r.reward?'+'+r.reward+' тиын':'Бүгінгі сыйлық алынған'):'Шешім расталмады';
+  $('#resFriend').hidden=true;$('#result').hidden=false;
+  if(r.good&&r.reward)PL().toast('🧩','Жұмбақ шешілді','+'+r.reward+' тиын');
+  snd('end',true);
+}
+
+function syncSeg(){
+  $('#mAi').setAttribute('aria-pressed',segMode==='ai');
+  $('#mNet').setAttribute('aria-pressed',segMode==='net');
+  $('#mTwo').setAttribute('aria-pressed',segMode==='two');
+  $('#mCamp').setAttribute('aria-pressed',segMode==='camp');
+  $('#mPuz').setAttribute('aria-pressed',segMode==='puz');
+}
+
 function setMode(m,quiet){
   if(rp){rp=null;$('#rpanel').hidden=true;$('#pbTop').hidden=$('#pbBot').hidden=true}
   if(net&&net.you&&net.mode==='pvp'&&net.status==='active'&&m!=='net'){PL().toast('♟️','Алдымен онлайн ойынды аяқта','«Берілу» батырмасы бар');return}
   if(net&&net.mode==='pvp'&&net.status==='open'&&m!=='net'){napi({action:'cancel',id:net.id});net=null;clearTimeout(pollT)}
-  if(net&&net.mode==='ai'&&m!=='ai')net=null;
-  mode=m;
-  $('#mAi').setAttribute('aria-pressed',m==='ai');
-  $('#mNet').setAttribute('aria-pressed',m==='net');
-  $('#mTwo').setAttribute('aria-pressed',m==='two');
+  if(net&&net.mode==='ai'&&m!=='ai'&&m!=='camp')net=null;
+  pz=null;document.body.classList.remove('finale');
+  if(m==='camp'||m==='puz'){
+    if(net&&net.mode==='ai')net=null;
+    if(m==='puz'){startPuzzle();return}
+    mode='ai';segMode='camp';campStage=0;net=null;setFlip(false);resetLocal();syncSeg();renderBars();refreshUI();showCampMap();return;
+  }
+  campStage=m==='ai'?campStage:0;
+  mode=m;segMode=campStage&&m==='ai'?'camp':m;
+  syncSeg();
   if(quiet){refreshUI();return}
   if(m==='net'){
     if(net&&net.mode==='pvp'){refreshUI();return}
@@ -1630,9 +1802,15 @@ function setMode(m,quiet){
 $('#mAi').addEventListener('click',()=>setMode('ai'));
 $('#mNet').addEventListener('click',()=>setMode('net'));
 $('#mTwo').addEventListener('click',()=>setMode('two'));
+$('#mCamp').addEventListener('click',()=>setMode('camp'));
+$('#mPuz').addEventListener('click',()=>setMode('puz'));
 $('#bNew').addEventListener('click',newGame);
 $('#bUndo').addEventListener('click',undo);
-$('#resBtn').addEventListener('click',()=>{if(mode==='net')newGame();else newGame()});
+$('#resBtn').addEventListener('click',()=>{
+  if(mode==='puz'){startPuzzle();return}
+  if(campStage&&winner==='w'&&net&&net.you==='w'){setMode('camp');return}
+  newGame();
+});
 $('#lvlSeg').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   lvl=+b.dataset.l;try{localStorage.setItem('lvl',lvl)}catch(x){}
@@ -1717,7 +1895,7 @@ async function startup(){
     if(r.match&&r.match.status!=='done'){
       const m=r.match;
       mode=m.mode==='ai'?'ai':'net';
-      $('#mAi').setAttribute('aria-pressed',mode==='ai');$('#mNet').setAttribute('aria-pressed',mode==='net');
+      campStage=m.camp||0;segMode=campStage?'camp':mode;syncSeg();
       adoptNet(m);setFlip(net.you==='b');
       if(m.status==='active'){restoreFromMoves(m.moves);net.applied=m.moves.length;hideLobby()}
       else{net.public=true;showLobby('wait')}

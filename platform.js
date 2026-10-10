@@ -214,7 +214,7 @@ async function renderFriends(b){
   for(const u of r.friends){
     const li=mk(u,(u.playing?'🎮 ойнап жатыр':u.online?'🟢 онлайн':'⚪ офлайн')+' · '+u.rating);
     if(u.online&&!u.playing){const iv=el('button','btn sm','⚔');iv.title='Ойынға шақыру';iv.setAttribute('aria-label','Ойынға шақыру');
-      iv.onclick=async()=>{iv.disabled=true;const x=await api('match',{method:'POST',body:{action:'invite',to:u.id}});if(x.match&&window.__openPvp){closeOv();window.__openPvp(x.match);toast('📨','Шақыру жіберілді',u.name)}else{toast('⚠️',x.error||'Қате');iv.disabled=false}};
+      iv.onclick=async()=>{iv.disabled=true;const x=await api('match',{method:'POST',body:{action:'invite',to:u.id,tc:(()=>{try{return +localStorage.tc||0}catch(e){return 0}})()}});if(x.match&&window.__openPvp){closeOv();window.__openPvp(x.match);toast('📨','Шақыру жіберілді',u.name)}else{toast('⚠️',x.error||'Қате');iv.disabled=false}};
       li.append(iv)}
     if(u.playing){const w=el('button','btn ghost sm','👁');w.title='Ойынын көру';w.setAttribute('aria-label','Көру');w.onclick=()=>{closeOv();window.__watch&&window.__watch(u.playing)};li.append(w)}
     let armed=0;const rm=el('button','btn ghost sm','✕');rm.setAttribute('aria-label','Достан шығару');
@@ -307,7 +307,8 @@ function renderPieceShop(b){
     requestAnimationFrame(()=>{if(window.__iconSkin)window.__iconSkin(cv2,k,'Q','b')});
     const pv=el('div','pvrow');pv.append(cv,cv2);
     c.append(pv,el('b','',PSN[k][1]));
-    if(!has&&it.ach&&data.catalog[it.ach])c.append(el('span','',data.catalog[it.ach].icon+' '+data.catalog[it.ach].name+' жетістігімен ашылады'));
+    const acs=(it.ach||[]).map(x=>data.catalog[x]).filter(Boolean);
+    if(!has&&acs.length)c.append(el('span','',acs.map(x=>x.icon+' '+x.name).join(' немесе ')+' жетістігімен ашылады'));
     const bt=el('button','btn',cur===k?'Қолданылуда':has?'Таңдау':'🪙 '+it.price);
     bt.disabled=cur===k||(!has&&me.coins<it.price);
     bt.onclick=async()=>{
