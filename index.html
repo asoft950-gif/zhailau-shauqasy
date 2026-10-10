@@ -122,6 +122,12 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <button data-l="2" aria-pressed="false">Орташа</button>
     <button data-l="3" aria-pressed="true">Қиын</button>
   </div>
+  <div class="seg lvl" id="perSeg" role="group" aria-label="Бот мінезі">
+    <button data-p="" aria-pressed="true">🤖 Қарапайым</button>
+    <button data-p="aggr" aria-pressed="false">🐺 Шабуылшы</button>
+    <button data-p="def" aria-pressed="false">🐢 Қорғанушы</button>
+    <button data-p="trick" aria-pressed="false">🦊 Қу</button>
+  </div>
   <div class="pbar" id="pbTop" hidden></div>
   <div class="gbar" id="gBar" hidden></div>
 
@@ -576,9 +582,11 @@ const cv=$('#cv'),ctx=cv.getContext('2d');
 const stage=$('#stage');
 let S=360,T=40,pad=16,dpr=1,bg=document.createElement('canvas');
 let flip=false;const fx=x=>flip?7-x:x;
-let net=null,lvl=3;
+let net=null,lvl=3,per='';
 try{lvl=+localStorage.getItem('lvl')||3}catch(e){}
 if(![1,2,3].includes(lvl))lvl=3;
+try{per=localStorage.getItem('per')||''}catch(e){}
+if(!['','aggr','def','trick'].includes(per))per='';
 let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
 const SKS=makeSkins({E,Fill,RR,Tube,mixc,lit,drk,TAU});
@@ -1188,11 +1196,11 @@ try{
   aiW.onerror=()=>{aiW=null;for(const k in aiPend){const f=aiPend[k];delete aiPend[k];f(undefined)}};
 }catch(e){aiW=null}
 function aiMove(col,level){
-  const sync=()=>pickMove(board,col,level);
+  const sync=()=>pickMove(board,col,level,0,per||null);
   if(!aiW)return Promise.resolve(sync());
   return new Promise(res=>{
     const id=++aiSeq;aiPend[id]=m=>res(m===undefined?sync():m);
-    aiW.postMessage({id,b:board.slice(0,64).map(p=>p?{t:p.t,c:p.c,id:p.id}:null),cs:[board[64],board[65]],col,level});
+    aiW.postMessage({id,b:board.slice(0,64).map(p=>p?{t:p.t,c:p.c,id:p.id}:null),cs:[board[64],board[65]],col,level,persona:per||null});
   });
 }
 async function aiTurn(){
@@ -1355,10 +1363,11 @@ function refreshUI(){
   {const pv=net&&net.you&&(net.mode==='pvp'||net.mode==='ai')&&net.status==='active'&&!over&&net.moves.length>=2;
    const bd=$('#bDraw');bd.hidden=!pv;bd.disabled=!!pv&&net.draw===net.you;bd.textContent=pv&&net.draw===net.you?'🤝 Ұсыныс жіберілді…':'🤝 Тең ұсыну';
    $('#drawBox').hidden=!(pv&&net.mode==='pvp'&&net.draw&&net.draw!==net.you)}
-  $('#lvlSeg').hidden=mode!=='ai'||campStage>0;
+  $('#lvlSeg').hidden=mode!=='ai'||campStage>0;$('#perSeg').hidden=mode!=='ai'||campStage>0;
   const bn=$('#bNew');
   bn.hidden=mode==='net'&&net&&net.you&&net.status!=='done';
   bn.textContent=mode==='net'?'Лоббиге қайту':mode==='puz'?'Бастан':campStage?'Қайта':'Жаңа ойын';
+  $('#perSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.p===per));
   $('#lvlSeg').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.l===lvl));
   updateClaim();
 }
@@ -1577,7 +1586,7 @@ async function newGame(){
   if(mode==='ai'&&PL().isIn()){
     const g=gen;
     busy=true;setStatus('Ойын дайындалуда…','w');
-    const r=await napi({action:'ai',level:lvl});
+    const r=await napi({action:'ai',level:lvl,persona:per||undefined});
     if(g!==gen)return;
     busy=false;
     if(r.match){adoptNet(r.match);setStatus('Сенің жүрісің · Күн','w')}
@@ -1744,7 +1753,7 @@ function startReplay(moves,info,noAuto){
   mode='replay';net=null;setFlip(false);
   ['mAi','mNet','mTwo','mCamp','mPuz'].forEach(i=>$('#'+i).setAttribute('aria-pressed','false'));
   resetLocal();hideLobby();
-  $('#result').hidden=true;$('#rpanel').hidden=false;$('#lvlSeg').hidden=true;
+  $('#result').hidden=true;$('#rpanel').hidden=false;$('#lvlSeg').hidden=true;$('#perSeg').hidden=true;
   rp.run=0;rpBars();rpShow();
   setStatus('Қайта көру','w');
   if(!noAuto)rpPlay();
@@ -2038,6 +2047,12 @@ $('#resBtn').addEventListener('click',()=>{
   if(mode==='puz'){startPuzzle();return}
   if(campStage&&winner==='w'&&net&&net.you==='w'){setMode('camp');return}
   newGame();
+});
+$('#perSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  per=b.dataset.p;try{localStorage.setItem('per',per)}catch(x){}
+  refreshUI();
+  if(net&&net.mode==='ai'&&net.status==='active')PL().toast('🎭','Мінез келесі ойыннан бастап өзгереді');
 });
 $('#lvlSeg').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;

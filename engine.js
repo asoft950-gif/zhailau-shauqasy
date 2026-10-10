@@ -230,7 +230,40 @@ export function analyzePly(moves, k) {
   return { loss: Math.max(0, best - pl), best: bm ? { f: bm.f, t: bm.t } : null, ev: (col === 'w' ? 1 : -1) * pl };
 }
 /* difficulty: 1 easy (shallow + mistakes), 2 medium, 3 hard */
-export function pickMove(b, col, level, noise = 0) {
+/* bot personalities: same strength class, different taste among near-equal moves */
+export const PERSONAS = ['aggr', 'def', 'trick'];
+function personaMove(b, col, depth, persona) {
+  const ms = legal(b, col);
+  if (!ms.length) return null;
+  for (let i = ms.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ms[i], ms[j]] = [ms[j], ms[i]]; }
+  orderMoves(b, ms);
+  const margin = persona === 'trick' ? 70 : 60;
+  let best = -Infinity, pick = ms[0], pickSc = -Infinity;
+  for (const m of ms) {
+    const nb = applyMove(b, m);
+    let sc = -nega(nb, depth - 1, -Infinity, best === -Infinity ? Infinity : -(best - margin), opp(col), 1);
+    if (sc > best) best = sc;
+    if (sc < best - margin) continue;
+    const cap = b[m.t], info = moveInfo(b, m);
+    let bonus = 0;
+    if (persona === 'aggr') {
+      if (cap) bonus += 20 + VAL[cap.t] * 0.12;
+      if (inChk(nb, opp(col))) bonus += 30;
+      if (b[m.f].t === 'P') bonus += 8;
+    } else if (persona === 'def') {
+      if (!cap && attacked(nb, m.t, opp(col))) bonus -= 40;
+      if (info && info.rf !== undefined) bonus += 35;
+      if (b[m.f].t !== 'P' && b[m.f].t !== 'K' && (col === 'w' ? m.t >> 3 > m.f >> 3 : m.t >> 3 < m.f >> 3)) bonus += 12;
+      if (b[m.f].t === 'K' && info && info.rf === undefined) bonus -= 15;
+    } else {
+      bonus += (Math.random() - 0.5) * 2 * margin;
+    }
+    const tot = sc + bonus;
+    if (tot > pickSc) { pickSc = tot; pick = m; }
+  }
+  return pick;
+}
+export function pickMove(b, col, level, noise = 0, persona = null) {
   const lv = level === 1 || level === 2 ? level : 3;
   if (noise > 0 && Math.random() < noise) { const ms = legal(b, col); if (ms.length) return ms[Math.floor(Math.random() * ms.length)]; }
   if (lv === 1) {
@@ -239,6 +272,7 @@ export function pickMove(b, col, level, noise = 0) {
     if (Math.random() < 0.4) return ms[Math.floor(Math.random() * ms.length)];
     return bestMove(b, col, 1);
   }
+  if (persona && PERSONAS.includes(persona)) return personaMove(b, col, lv === 2 ? 2 : 3, persona);
   return bestMove(b, col, lv === 2 ? 2 : 3);
 }
 export { PROMO, N_D, K_D, B_D, R_D, VAL, inb, opp, pseudo, applyMove, moveInfo, attacked, kingSq, inChk, legal, evalB, orderMoves, qs, nega, bestMove };

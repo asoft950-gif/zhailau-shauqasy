@@ -99,7 +99,7 @@ async function view(m, uid) {
     moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
     draw: m.draw_by || null, rematch, team: !!m.team, mover: moverId(m), myTurn: !!(m.team && uid && moverId(m) === uid), moverName: m.team ? (([w, b, w2, b2].find(x => x && x.id === moverId(m)) || {}).username || '') : '', white2: m.team ? (pub(w2) || { name: 'Күтілуде…', avatar: null }) : null, black2: m.team ? (pub(b2) || { name: 'Күтілуде…', avatar: null }) : null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
-    black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
+    black: m.mode === 'ai' ? { name: (({ aggr: 'Қасқыр', def: 'Тасбақа', trick: 'Түлкі' })[m.persona] || 'Бот') + ' · ' + (['', 'жеңіл', 'орташа', 'қиын'][m.level] || ''), avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
 }
 
@@ -213,7 +213,8 @@ export default async function handler(req, res) {
         if (!CAMP[camp - 1] || camp > done + 1) return send(res, 400, { error: 'Бұл деңгей әлі ашылмаған' });
         level = CAMP[camp - 1].level;
       }
-      const r = await sql.query("INSERT INTO matches (code,mode,level,white_id,status,camp) VALUES ($1,'ai',$2,$3,'active',$4) RETURNING *", [newCode() + crypto.randomBytes(2).toString('hex'), level, uid, camp]);
+      const persona = !camp && ['aggr', 'def', 'trick'].includes(b.persona) ? b.persona : null;
+      const r = await sql.query("INSERT INTO matches (code,mode,level,white_id,status,camp,persona) VALUES ($1,'ai',$2,$3,'active',$4,$5) RETURNING *", [newCode() + crypto.randomBytes(2).toString('hex'), level, uid, camp, persona]);
       return send(res, 200, { match: await view(r[0], uid), awards: null });
     }
     if (b.action === 'quick' || b.action === 'create') {
@@ -382,7 +383,7 @@ export default async function handler(req, res) {
       let nb = applyMove(board, mv);
       let after = gameStatus(nb, seat === 'w' ? 'b' : 'w');
       if (!after.over && m.mode === 'ai') {
-        const bm = pickMove(nb, 'b', m.level, m.camp && CAMP[m.camp - 1] ? CAMP[m.camp - 1].noise : 0);
+        const bm = pickMove(nb, 'b', m.level, m.camp && CAMP[m.camp - 1] ? CAMP[m.camp - 1].noise : 0, m.persona || null);
         if (bm) {
           moves.push(enc(bm));
           nb = applyMove(nb, bm);
