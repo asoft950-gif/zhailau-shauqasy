@@ -103,7 +103,7 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['daily','Тапсырма'],['shop','Дүкен'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
@@ -111,6 +111,8 @@ async function profileView(t){
   const body=el('div');d.append(body);
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
+  else if(tab==='daily')renderDaily(body);
+  else if(tab==='shop')renderShop(body);
   else if(tab==='top')await renderTop(body);
   else await renderAdmin(body,'');
   openOv();
@@ -154,6 +156,53 @@ function renderProfile(b){
   const lo=el('button','btn ghost wide','Шығу');lo.style.marginTop='16px';
   lo.onclick=async()=>{await api('logout',{method:'POST',body:{}});me=null;data=null;renderBtn();closeOv();fireAuth('out');toast('👋','Сау бол!')};
   b.append(lo);
+}
+function left(iso){const ms=new Date(iso)-Date.now();const h=Math.max(0,Math.floor(ms/3600e3)),m=Math.max(0,Math.floor(ms%3600e3/60e3));return h+' сағ '+m+' мин'}
+async function patchMe(body){const r=await api('me',{method:'PATCH',body});return r}
+function renderDaily(b){
+  const dl=data.daily;
+  b.append(el('p','coins','🪙 '+me.coins+' тиын'));
+  b.append(el('p','xpt','Бүгінгі тапсырмалар · жаңарады: '+left(dl.nextAt)));
+  const ul=el('div','qlist');
+  for(const q of dl.quests){
+    const c=el('div','quest'+(q.claimed?' done':''));
+    const t=el('div','qt');t.append(el('b','',q.title),el('span','',q.progress+' / '+q.goal));
+    const bar=el('div','qbar');const i=el('i');i.style.width=(q.progress/q.goal*100)+'%';bar.append(i);t.append(bar);
+    const bt=el('button','btn',q.claimed?'✓':'🪙 +'+q.reward);
+    bt.disabled=q.claimed||q.progress<q.goal;
+    bt.onclick=async()=>{bt.disabled=true;const r=await patchMe({claim:q.key});if(r.ok!==false&&!r.error){toast('🪙','+'+q.reward+' тиын');await profileView('daily')}else toast('⚠️',r.error||'Қате')};
+    c.append(t,bt);ul.append(c);
+  }
+  const all=dl.quests.every(q=>q.claimed);
+  const bc=el('div','quest bonus'+(dl.bonus.claimed?' done':''));
+  const bt=el('div','qt');bt.append(el('b','','🎁 Үш тапсырма бонусы'),el('span','',all?'Дайын!':'Үшеуін де ал'));
+  const bb=el('button','btn',dl.bonus.claimed?'✓':'🪙 +'+dl.bonus.reward);bb.disabled=!all||dl.bonus.claimed;
+  bb.onclick=async()=>{bb.disabled=true;const r=await patchMe({claim:'all'});if(!r.error){toast('🎁','+'+dl.bonus.reward+' тиын');await profileView('daily')}else toast('⚠️',r.error)};
+  bc.append(bt,bb);ul.append(bc);
+  b.append(ul);
+  b.append(el('p','xpt','Тиын әр рейтингті ойыннан және жетістіктен беріледі.'));
+}
+const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі']};
+function renderShop(b){
+  b.append(el('p','coins','🪙 '+me.coins+' тиын'));
+  b.append(el('p','xpt','Тақта терілері'));
+  const own=new Set(me.skins.own),cur=me.skins.board;
+  const g=el('div','agrid');
+  for(const k of Object.keys(data.shop)){
+    const price=data.shop[k],has=own.has(k),c=el('div','ach got skin'+(cur===k?' on':''));
+    c.append(el('div','ic',SKN[k][0]),el('b','',SKN[k][1]));
+    const bt=el('button','btn',cur===k?'Қолданылуда':has?'Таңдау':'🪙 '+price);
+    bt.disabled=cur===k||(!has&&me.coins<price);
+    bt.onclick=async()=>{
+      bt.disabled=true;
+      const r=await patchMe(has?{equip:k}:{buy:k});
+      if(r.error){toast('⚠️',r.error);bt.disabled=false;return}
+      if(!has)await patchMe({equip:k});
+      await refresh();fireAuth('skin');await profileView('shop');
+    };
+    c.append(bt);g.append(c);
+  }
+  b.append(g);
 }
 function renderAch(b){
   const got=new Set(data.achievements.map(a=>a.key));
@@ -217,7 +266,7 @@ const authCbs=[];
 function fireAuth(st){for(const c of authCbs.slice()){try{c.fn(st)}catch(e){}if(c.once&&st==='in')authCbs.splice(authCbs.indexOf(c),1)}}
 function showAward(r,result){
   const sign=r.dRating>=0?'+':'';
-  toast(result==='win'?'🏆':result==='draw'?'🤝':'💪','+'+r.dXp+' XP · рейтинг '+sign+r.dRating,'Рейтинг: '+r.rating+(r.levelUp?' · Жаңа деңгей!':''));
+  toast(result==='win'?'🏆':result==='draw'?'🤝':'💪','+'+r.dXp+' XP · рейтинг '+sign+r.dRating,'Рейтинг: '+r.rating+(r.dCoins?' · +'+r.dCoins+' 🪙':'')+(r.levelUp?' · Жаңа деңгей!':''));
   let delay=900;
   for(const k of (r.newAchievements||[])){
     const a=(data&&data.catalog&&data.catalog[k])||null;
@@ -231,7 +280,7 @@ function init(){
   $('#acct').onclick=()=>me?profileView('profile'):authView('login');
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
-  window.Plat={api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
+  window.Plat={skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();

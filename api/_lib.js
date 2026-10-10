@@ -118,6 +118,7 @@ export async function applyResult(uid, g, oppRating) {
   const exp = 1 / (1 + Math.pow(10, (oppRating - u.rating) / 400));
   const dRating = Math.round(24 * (score - exp));
   const dXp = (win ? 30 : draw ? 15 : 8) + g.captures * 2 + (g.mode === 'pvp' ? 10 : 0);
+  const dCoins = (win ? 15 : draw ? 8 : 5) + (g.mode === 'pvp' ? 5 : 0);
   const streak = win ? u.streak + 1 : 0;
   const nu = {
     games: u.games + 1, wins: u.wins + (win ? 1 : 0), losses: u.losses + (g.result === 'loss' ? 1 : 0), draws: u.draws + (draw ? 1 : 0),
@@ -127,12 +128,54 @@ export async function applyResult(uid, g, oppRating) {
   const had = new Set((await sql.query('SELECT key FROM achievements WHERE user_id=$1', [uid])).map(r => r.key));
   const newKeys = earned(nu, g, had);
   const q = [
-    sql.query('UPDATE users SET games=$1,wins=$2,losses=$3,draws=$4,captures=$5,streak=$6,best_streak=$7,rating=$8,xp=$9 WHERE id=$10',
-      [nu.games, nu.wins, nu.losses, nu.draws, nu.captures, nu.streak, nu.best_streak, nu.rating, nu.xp, uid]),
+    sql.query('UPDATE users SET games=$1,wins=$2,losses=$3,draws=$4,captures=$5,streak=$6,best_streak=$7,rating=$8,xp=$9,coins=coins+$11 WHERE id=$10',
+      [nu.games, nu.wins, nu.losses, nu.draws, nu.captures, nu.streak, nu.best_streak, nu.rating, nu.xp, uid, dCoins + newKeys.length * 20]),
     sql.query('INSERT INTO games (user_id,result,mode,side,moves,captures,lost,by_piece) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
       [uid, g.result, g.mode, g.side, g.moves, g.captures, g.lost, JSON.stringify(g.by_piece)])
   ];
   for (const k of newKeys) q.push(sql.query('INSERT INTO achievements (user_id,key) VALUES ($1,$2) ON CONFLICT DO NOTHING', [uid, k]));
   await Promise.all(q);
-  return { dRating, dXp, rating: nu.rating, xp: nu.xp, level: levelOf(nu.xp), levelUp: levelOf(nu.xp) > levelOf(u.xp), newAchievements: newKeys };
+  return { dRating, dXp, dCoins: dCoins + newKeys.length * 20, rating: nu.rating, xp: nu.xp, level: levelOf(nu.xp), levelUp: levelOf(nu.xp) > levelOf(u.xp), newAchievements: newKeys };
+}
+
+/* ---------- daily quests + shop ---------- */
+const H5 = 5 * 3600e3; // Asia/Qyzylorda
+export function dayInfo() {
+  const n = Math.floor((Date.now() + H5) / 86400000);
+  return { n, key: new Date(n * 86400000).toISOString().slice(0, 10), start: new Date(n * 86400000 - H5) };
+}
+export const QUESTS = [
+  { k: 'win1', t: 'Бүгін 1 ойында жең', goal: 1, reward: 30, col: "count(*) FILTER (WHERE result='win')" },
+  { k: 'play3', t: '3 ойын ойна', goal: 3, reward: 25, col: 'count(*)' },
+  { k: 'caps8', t: '8 жауды құлат', goal: 8, reward: 30, col: 'COALESCE(sum(captures),0)' },
+  { k: 'pvp1', t: 'Адаммен 1 ойын ойна', goal: 1, reward: 40, col: "count(*) FILTER (WHERE mode='pvp')" },
+  { k: 'clean', t: 'Фигурасын жоғалтпай жең', goal: 1, reward: 60, col: "count(*) FILTER (WHERE result='win' AND lost=0)" },
+  { k: 'pvpwin', t: 'Адамды жең', goal: 1, reward: 50, col: "count(*) FILTER (WHERE result='win' AND mode='pvp')" }
+];
+export const DAILY_BONUS = 50;
+export const SHOP = { grass: 0, night: 250, snow: 350, sand: 450, royal: 800 };
+export async function dailyFor(uid) {
+  const d = dayInfo();
+  const picks = [0, 2, 4].map(i => QUESTS[(d.n + i) % QUESTS.length]);
+  const sel = picks.map((q, i) => `${q.col} AS q${i}`).join(', ');
+  const p = (await sql.query(`SELECT ${sel} FROM games WHERE user_id=$1 AND created_at >= $2`, [uid, d.start.toISOString()]))[0] || {};
+  const cl = new Set((await sql.query('SELECT key FROM claims WHERE user_id=$1 AND day=$2', [uid, d.key])).map(r => r.key));
+  const quests = picks.map((q, i) => ({ key: q.k, title: q.t, goal: q.goal, reward: q.reward, progress: Math.min(q.goal, Number(p['q' + i] || 0)), claimed: cl.has(q.k) }));
+  return { day: d.key, quests, bonus: { reward: DAILY_BONUS, claimed: cl.has('all') }, nextAt: new Date(d.start.getTime() + 86400000).toISOString() };
+}
+export async function claimQuest(uid, key) {
+  const d = await dailyFor(uid);
+  if (key === 'all') {
+    if (!d.quests.every(q => q.claimed) || d.bonus.claimed) return null;
+    const r = await sql.query("INSERT INTO claims (user_id,day,key) VALUES ($1,$2,'all') ON CONFLICT DO NOTHING RETURNING key", [uid, d.day]);
+    if (!r.length) return null;
+    await sql.query('UPDATE users SET coins=coins+$1 WHERE id=$2', [DAILY_BONUS, uid]);
+    return DAILY_BONUS;
+  }
+  const q = d.quests.find(x => x.key === key);
+  if (!q || q.claimed || q.progress < q.goal) return null;
+  const r = await sql.query('INSERT INTO claims (user_id,day,key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING key', [uid, d.day, key]);
+  if (!r.length) return null;
+  await sql.query('UPDATE users SET coins=coins+$1 WHERE id=$2', [q.reward, uid]);
+  return q.reward;
 }

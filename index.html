@@ -584,23 +584,32 @@ function restoreSnap(s){
 
 /* ---------- board background (grass) ---------- */
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const SKINS={
+  grass:{f:['#5E432A','#3C2A18'],l:'#93C459',d:'#6B9D3D',LB:['#A7D56A','#82B44B','#B6DF7B','#76A83F'],DB:['#7DB147','#5C8E32','#8CC05A','#4F8029'],fl:['#FFFFFF','#FFE066','#FFB3C7','#FFFFFF'],fc:'#F2A900',ov:['rgba(255,255,200,.10)','rgba(0,40,0,.10)']},
+  night:{f:['#2B2250','#150F36'],l:'#4B5BAE',d:'#2E3A7C',LB:['#7B8CE0','#6574C8','#8E9CF0'],DB:['#4C5BAE','#3C4890','#5B6AC0'],fl:['#FFFFFF','#FFE98A','#BFC8FF','#FFFFFF'],fc:'#FFF3B0',ov:['rgba(190,200,255,.12)','rgba(5,5,40,.2)']},
+  snow:{f:['#66798A','#34414D'],l:'#EEF5FB',d:'#B7D1E6',LB:['#FFFFFF','#DCEBF7','#F7FBFF'],DB:['#9FBFD8','#C4DBEC','#8FB2CF'],fl:['#FFFFFF','#CFE8FF','#E8F4FF','#FFFFFF'],fc:'#8CC8F5',ov:['rgba(255,255,255,.2)','rgba(60,100,150,.1)']},
+  sand:{f:['#6B4423','#3F2512'],l:'#EBCF92',d:'#C9A25A',LB:['#F7E4B0','#DDB96F','#F2D79C'],DB:['#B88C45','#D4AD64','#A97C38'],fl:['#8A5A2B','#C98A4B','#6B4423','#A06A33'],fc:'#5C3A1A',ov:['rgba(255,240,190,.15)','rgba(110,60,0,.12)']},
+  royal:{f:['#3A1219','#1A0509'],l:'#EBC96A',d:'#7B1F2F',LB:['#FFE9A0','#D9B34D','#F6D87E'],DB:['#A6354A','#8A2538','#BC4A5F'],fl:['#FFE9A0','#FFFFFF','#F6D87E','#FFE9A0'],fc:'#B88A1F',ov:['rgba(255,235,160,.16)','rgba(60,0,10,.2)']}
+};
+let skinName='grass';
 function buildBoard(){
+  const SK=SKINS[skinName]||SKINS.grass;
   bg.width=Math.round(S*dpr);bg.height=Math.round(S*dpr);
   const c=bg.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
   const rnd=mulberry(20261010);
-  const g=c.createLinearGradient(0,0,0,S);g.addColorStop(0,'#5E432A');g.addColorStop(1,'#3C2A18');
+  const g=c.createLinearGradient(0,0,0,S);g.addColorStop(0,SK.f[0]);g.addColorStop(1,SK.f[1]);
   c.fillStyle=g;c.beginPath();c.roundRect(0,0,S,S,S*.03);c.fill();
   for(let i=0;i<200;i++){
     c.strokeStyle='rgba(255,235,200,'+(rnd()*.07)+')';c.lineWidth=1;
     const x=rnd()*S,y=rnd()*S;c.beginPath();c.moveTo(x,y);c.lineTo(x+rnd()*14-7,y+rnd()*3);c.stroke();
   }
-  const LB=['#A7D56A','#82B44B','#B6DF7B','#76A83F'],DB=['#7DB147','#5C8E32','#8CC05A','#4F8029'];
+  const LB=SK.LB,DB=SK.DB;
   for(let r=0;r<8;r++)for(let q=0;q<8;q++){
     const x=pad+q*T,y=pad+r*T,light=(r+q)%2===0;
     c.save();c.beginPath();c.rect(x,y,T,T);c.clip();
-    c.fillStyle=light?'#93C459':'#6B9D3D';c.fillRect(x,y,T,T);
+    c.fillStyle=light?SK.l:SK.d;c.fillRect(x,y,T,T);
     const gr=c.createRadialGradient(x+T*.5,y+T*.5,T*.1,x+T*.5,y+T*.5,T*.8);
-    gr.addColorStop(0,'rgba(255,255,200,.10)');gr.addColorStop(1,'rgba(0,40,0,.10)');
+    gr.addColorStop(0,SK.ov[0]);gr.addColorStop(1,SK.ov[1]);
     c.fillStyle=gr;c.fillRect(x,y,T,T);
     const pal=light?LB:DB,n=Math.round(T*1.1);
     c.lineWidth=Math.max(1,T*.024);c.lineCap='round';
@@ -615,9 +624,9 @@ function buildBoard(){
   for(let i=0;i<16;i++){
     const r=Math.floor(rnd()*8),q=Math.floor(rnd()*8);
     const x=pad+q*T+T*(.12+rnd()*.76),y=pad+r*T+T*(.55+rnd()*.4);
-    const col=['#FFFFFF','#FFE066','#FFB3C7','#FFFFFF'][i%4],pr=T*.026;
+    const col=SK.fl[i%4],pr=T*.026;
     for(let k=0;k<5;k++){c.fillStyle=col;c.beginPath();c.arc(x+Math.cos(k*TAU/5)*pr*1.5,y+Math.sin(k*TAU/5)*pr*1.5,pr,0,TAU);c.fill()}
-    c.fillStyle='#F2A900';c.beginPath();c.arc(x,y,pr*.8,0,TAU);c.fill();
+    c.fillStyle=SK.fc;c.beginPath();c.arc(x,y,pr*.8,0,TAU);c.fill();
   }
   c.strokeStyle='rgba(0,0,0,.35)';c.lineWidth=2;c.strokeRect(pad,pad,T*8,T*8);
   { // gold inlay + corner studs on the wooden frame
@@ -1640,7 +1649,9 @@ for(const t of ['K','Q','R','B','N','P']){
   icons.push({cv:k,t,c:'w'});
 }
 
+window.__setSkin=n=>{if(SKINS[n]&&n!==skinName){skinName=n;buildBoard()}};
 window.__icon=(cvs,t,c)=>drawIcon(cvs,t,c,0);
+function applySkin(){const P=PL();window.__setSkin(P.skin?P.skin():'grass')}
 async function startup(){
   refreshUI();
   const P=PL();
@@ -1672,6 +1683,7 @@ async function startup(){
     if(r.match&&r.match.moves&&r.match.moves.length&&r.match.status==='done')startReplay(r.match.moves,r.match);
     else P.toast('⚠️','Ойын табылмады немесе әлі аяқталмаған');
   }
+  P.onAuth(()=>applySkin());applySkin();
   P.onAuth(st=>{
     if(st==='out'){if(net&&net.mode==='pvp')clearTimeout(pollT);net=null;if(mode==='net'){resetLocal();setFlip(false);showLobby('menu')}else newGame();renderBars();refreshUI()}
     else if(st==='in'){if(mode==='ai'&&!net&&!busy&&!hist.length)newGame();else if(mode==='net'&&!net)showLobby('menu')}
