@@ -243,3 +243,5 @@
 .anchip.inacc{color:#c98a00;font-weight:800}
 .anchip.mist{color:#d9622b;font-weight:800}
 .anchip.blun{color:#d12f2f;font-weight:800}
+
+.pushrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}

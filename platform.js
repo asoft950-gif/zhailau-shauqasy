@@ -250,9 +250,41 @@ async function openUser(id,back){
   }
 }
 const lvOf=xp=>Math.floor(Math.sqrt(xp/50))+1;
+const urlB64=v=>{const p='='.repeat((4-v.length%4)%4),r=(v+p).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(r);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))};
+async function pushState(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))return 'unsupported';
+  if(Notification.permission==='denied')return 'denied';
+  try{const reg=await navigator.serviceWorker.ready;const s=await reg.pushManager.getSubscription();return s&&Notification.permission==='granted'?'on':'off'}catch(e){return 'off'}
+}
+async function pushToggle(on){
+  const reg=await navigator.serviceWorker.ready;
+  if(!on){const s=await reg.pushManager.getSubscription();if(s){await patchMe({pushOff:s.endpoint});await s.unsubscribe()}return}
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted')throw new Error('denied');
+  const k=await api('me?vapid=1');
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlB64(k.key)});
+  const j=sub.toJSON();
+  const r=await patchMe({push:{endpoint:j.endpoint,keys:j.keys}});
+  if(r.error)throw new Error(r.error);
+}
+function pushBlock(b){
+  b.append(el('h2','','Хабарламалар'));
+  const row=el('div','pushrow');const tx=el('span','xpt','Тексеріліп жатыр…');const bt=el('button','btn','…');bt.disabled=true;row.append(tx,bt);b.append(row);
+  pushState().then(st=>{
+    const paint=s=>{
+      if(s==='unsupported'){tx.textContent='Бұл браузер хабарламаны қолдамайды. iPhone-да алдымен сайтты «Басты экранға қосу» арқылы орнат.';bt.hidden=true;return}
+      if(s==='denied'){tx.textContent='Хабарлама браузер баптауында бұғатталған. Сайт баптауынан рұқсат бер.';bt.hidden=true;return}
+      tx.textContent=s==='on'?'Қосулы: қарсыласың жүріс жасағанда және дос шақырғанда хабар келеді.':'Өшірулі. Қоссаң, жүрісің келгенде және дос шақырғанда хабар келеді.';
+      bt.textContent=s==='on'?'Өшіру':'🔔 Қосу';bt.disabled=false;bt.hidden=false;
+      bt.onclick=async()=>{bt.disabled=true;try{await pushToggle(s!=='on');paint(await pushState())}catch(e){toast('⚠️',e.message==='denied'?'Рұқсат берілмеді':(e.message||'Қате'));paint(await pushState())}};
+    };
+    paint(st);
+  });
+}
 function renderSettings(b){
   const u=me;let sa=u.avatar,sb=u.banner||'grass',st=u.title||'',sc=[...(u.showcase||[])];
   const got=data.achievements.map(a=>a.key).filter(k=>data.catalog[k]);
+  pushBlock(b);
   b.append(el('h2','','Бейне'));
   const pk=el('div','pick');
   AV.forEach(t=>{const bt=el('button');bt.type='button';bt.setAttribute('aria-label',AVN[t]);bt.setAttribute('aria-pressed',t===sa);bt.append(avatarCanvas(t));

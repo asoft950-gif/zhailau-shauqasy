@@ -287,3 +287,34 @@ export async function campaignWin(uid, stage) {
   }
   return { stage, first: true, coins: c.reward, ach, chest: true };
 }
+
+
+/* ---------- web push (VAPID keys derived from AUTH_SECRET, so no extra secret to manage) ---------- */
+const b64u = (buf) => Buffer.from(buf).toString('base64url');
+let _vapid = null;
+export function vapidKeys() {
+  if (_vapid) return _vapid;
+  const seed = crypto.createHash('sha256').update('vapid:' + SECRET).digest();
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.setPrivateKey(seed);
+  _vapid = { publicKey: b64u(ecdh.getPublicKey()), privateKey: b64u(seed) };
+  return _vapid;
+}
+/* notify every device of a user; never throws, gives up after ~1.5 s so it can be awaited safely */
+export async function pushTo(uid, payload) {
+  try {
+    if (!uid || !SECRET) return;
+    const subs = await sql.query('SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id=$1 LIMIT 5', [uid]);
+    if (!subs.length) return;
+    const wp = (await import('web-push')).default;
+    const v = vapidKeys();
+    wp.setVapidDetails('mailto:admin@zhaylau-shaiqasy.vercel.app', v.publicKey, v.privateKey);
+    const body = JSON.stringify(payload);
+    await Promise.race([
+      Promise.all(subs.map(s => wp.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 600, timeout: 1400 }).catch(async e => {
+        if (e && (e.statusCode === 404 || e.statusCode === 410)) await sql.query('DELETE FROM push_subs WHERE endpoint=$1', [s.endpoint]);
+      }))),
+      new Promise(r => setTimeout(r, 1500)),
+    ]);
+  } catch (e) { /* push is best-effort */ }
+}

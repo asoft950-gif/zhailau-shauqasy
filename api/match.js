@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
+import { pushTo, sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
 import { startBoard, applyMove, gameStatus, pickMove, posKey, evalB } from '../engine.js';
 
 const PC = 'QRBN';
@@ -263,6 +263,8 @@ export default async function handler(req, res) {
       await cancelOwnOpen(uid);
       const tc = TCS.includes(Number(b.tc)) ? Number(b.tc) : 0;
       const r = await sql.query("INSERT INTO matches (code,mode,white_id,is_public,status,invite_id,tc) VALUES ($1,'pvp',$2,false,'open',$3,$4) RETURNING *", [newCode(), uid, to, tc]);
+      const inv = await who(uid);
+      await pushTo(to, { title: 'Жайлау Шайқасы', body: ((inv && inv.username) || 'Досың') + ' сені ойынға шақырды ♟️', url: '/?join=' + r[0].code, tag: 'invite' });
       return send(res, 200, { match: await view(r[0], uid) });
     }
     if (b.action === 'join') {
@@ -398,6 +400,15 @@ export default async function handler(req, res) {
         `UPDATE matches SET moves=$1::jsonb, ver=ver+1, updated_at=now(), seen_${seat}=now(), draw_by=CASE WHEN draw_by='${seat}' THEN draw_by ELSE NULL END, cw=COALESCE($4, cw), cb=COALESCE($5, cb), turn_at=now() WHERE id=$2 AND ver=$3 AND status='active' RETURNING *`,
         [JSON.stringify(moves), m.id, m.ver, clk && clk.cw, clk && clk.cb]);
       if (!upd.length) return send(res, 409, { error: 'Синхрон бұзылды', match: await view(await load(m.id), uid) });
+      if (m.mode === 'pvp' && !after.over) {
+        const oppSide = seat === 'w' ? 'b' : 'w';
+        const nextUid = m.team ? moverId({ ...upd[0] }) : (oppSide === 'w' ? m.white_id : m.black_id);
+        const lastSeen = new Date(m['seen_' + oppSide]).getTime();
+        if (nextUid && nextUid !== uid && Date.now() - lastSeen > 20000) {
+          const me2 = await who(uid);
+          await pushTo(nextUid, { title: 'Жайлау Шайқасы', body: ((me2 && me2.username) || 'Қарсылас') + ' жүріс жасады — сенің кезегің', url: '/', tag: 'turn' + m.id });
+        }
+      }
       let awards = null;
       if (after.over) {
         const f2 = await finish(upd[0], after.winner, after.reason);

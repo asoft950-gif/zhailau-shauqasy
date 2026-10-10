@@ -1,4 +1,4 @@
-import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, streakInfo, checkin, openChest, SHOP, PSKINS, unlockedPieceSkins, CAMP, hashPw, checkPw, clearSession } from './_lib.js';
+import { sql, send, sessionUid, needJson, AVATARS, ACH, levelOf, dailyFor, claimQuest, streakInfo, checkin, openChest, SHOP, PSKINS, unlockedPieceSkins, CAMP, vapidKeys, hashPw, checkPw, clearSession } from './_lib.js';
 
 export const BANNERS = ['grass', 'dusk', 'night', 'snow', 'sand', 'royal', 'fire', 'sea'];
 const ONLINE_MS = 75000;
@@ -33,6 +33,7 @@ export default async function handler(req, res) {
       const pr = Number.isInteger(pid) && pid > 0 ? await publicProfile(pid) : null;
       return pr ? send(res, 200, { profile: pr, catalog: ACH }) : send(res, 404, { error: 'Ойыншы табылмады' });
     }
+    if (req.method === 'GET' && req.query && req.query.vapid !== undefined) return send(res, 200, { key: vapidKeys().publicKey });
     if (!uid) return send(res, 200, { user: null, notice: await notice() });
     const bn = await sql.query('SELECT banned FROM users WHERE id=$1', [uid]);
     if (!bn.length || bn[0].banned) return send(res, 200, { user: null, notice: await notice() });
@@ -44,6 +45,13 @@ export default async function handler(req, res) {
         const got = await claimQuest(uid, String(b.claim));
         if (got === null) return send(res, 400, { error: 'Алу мүмкін емес' });
       }
+      if (b.push && b.push.endpoint && b.push.keys) {
+        const ep = String(b.push.endpoint).slice(0, 600), k1 = String(b.push.keys.p256dh || '').slice(0, 200), k2 = String(b.push.keys.auth || '').slice(0, 100);
+        if (!/^https:\/\//.test(ep) || !k1 || !k2) return send(res, 400, { error: 'Қате жазылым' });
+        await sql.query('DELETE FROM push_subs WHERE user_id=$1 AND endpoint<>$2 AND created_at < now() - interval \'60 days\'', [uid, ep]);
+        await sql.query('INSERT INTO push_subs (endpoint,user_id,p256dh,auth) VALUES ($1,$2,$3,$4) ON CONFLICT (endpoint) DO UPDATE SET user_id=$2, p256dh=$3, auth=$4', [ep, uid, k1, k2]);
+      }
+      if (b.pushOff) await sql.query('DELETE FROM push_subs WHERE user_id=$1 AND endpoint=$2', [uid, String(b.pushOff)]);
       if (b.checkin) {
         const c = await checkin(uid);
         if (!c) return send(res, 400, { error: 'Бүгін алынған' });
