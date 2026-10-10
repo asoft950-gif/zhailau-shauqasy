@@ -121,7 +121,12 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="lobby" id="lobby" hidden></div>
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
-      <button class="btn" id="resBtn">Қайта ойнау</button>
+      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button></div>
+    </div>
+    <div class="rpanel" id="rpanel" hidden>
+      <div class="rpbtns"><button type="button" id="rpFirst" aria-label="Басына">⏮</button><button type="button" id="rpPrev" aria-label="Артқа">◀</button><button type="button" id="rpPlay" class="main" aria-label="Ойнату">▶</button><button type="button" id="rpNext" aria-label="Алға">▶︎|</button><button type="button" id="rpLast" aria-label="Соңына">⏭</button></div>
+      <input type="range" id="rpBar" min="0" max="0" value="0" aria-label="Жүріс">
+      <div class="rpinfo"><span id="rpTxt"></span><button type="button" class="ghost" id="rpShare">📤 Бөлісу</button><button type="button" class="ghost" id="rpExit">✕ Шығу</button></div>
     </div>
   </div>
 
@@ -552,6 +557,7 @@ try{lvl=+localStorage.getItem('lvl')||3}catch(e){}
 if(![1,2,3].includes(lvl))lvl=3;
 let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
+let locLog=[],rp=null;
 let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
 let hist=[],lost={w:[],b:[]},parts=[],shake=0,time=0,gen=0,idc=1;
 const odata={t:0,id:0,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false};
@@ -1030,6 +1036,7 @@ function afterMove(silent){
   setHint(sel>=0?board[sel]:null);
 }
 function showResult(){
+  if(rp){$('#result').hidden=true;return}
   const R={mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
   let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
@@ -1049,7 +1056,7 @@ function setHint(p){
 }
 async function playMove(m,remote){
   const g=gen;
-  busy=true;hist.push(snap());sel=-1;selMoves=[];
+  busy=true;hist.push(snap());sel=-1;selMoves=[];if(!net&&!rp)locLog.push(m.f|m.t<<6|(m.promo?1<<12:0));
   await animateMove(m);
   if(g!==gen)return;
   const a=board[m.f],v=board[m.t];
@@ -1161,7 +1168,7 @@ const napi=(body,q)=>PL().api('match'+(q||''),body?{method:'POST',body}:undefine
 let pollT=0,lastChange=0,pumping=false;
 
 function resetLocal(){
-  gen++;busy=false;over=false;winner=null;document.body.classList.remove("finale");sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;stat={moves:0,caps:0,byPiece:{},promos:0};reported=false;
+  locLog=[];gen++;busy=false;over=false;winner=null;document.body.classList.remove("finale");sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;stat={moves:0,caps:0,byPiece:{},promos:0};reported=false;
   board=new Array(64).fill(null);
   for(let c=0;c<8;c++){
     board[c]=mk(ORDER[c],'b',0,c);
@@ -1186,6 +1193,7 @@ function restoreFromMoves(moves){
   afterMove(true);
 }
 function canAct(){
+  if(rp)return false;
   if(net)return net.status==='active'&&turn===net.you;
   if(mode==='net')return false;
   return mode==='ai'?turn==='w':true;
@@ -1387,7 +1395,7 @@ function undo(){
   let s=hist.pop();
   if(mode==='ai'&&s.turn==='b'&&hist.length)s=hist.pop();
   gen++;
-  restoreSnap(s);
+  restoreSnap(s);locLog.length=hist.length;
 }
 cv.addEventListener('pointerdown',e=>{
   if(busy||over||!canAct())return;
@@ -1406,7 +1414,114 @@ cv.addEventListener('pointerdown',e=>{
 });
 $('#sndBtn').addEventListener('click',()=>setMuted(!muted));
 setMuted(muted);
+
+/* ---------- replay + share ---------- */
+const gameMoves=()=>net&&net.moves?net.moves.slice():locLog.slice();
+function rpShow(){
+  const n=rp.moves.length;
+  $('#rpBar').max=n;$('#rpBar').value=rp.k;
+  $('#rpTxt').textContent=rp.k+' / '+n+' жүріс';
+  $('#rpPlay').textContent=rp.auto?'⏸':'▶';
+}
+function rpBars(){
+  if(!rp.white)return;
+  const keep=net;net=null;
+  fillBar($('#pbTop'),rp.black,'b');fillBar($('#pbBot'),rp.white,'w');
+  net=keep;
+}
+async function rpSeek(k){
+  rp.auto=false;rp.run++;
+  k=Math.max(0,Math.min(rp.moves.length,k));
+  restoreFromMoves(rp.moves.slice(0,k));
+  rp.k=k;if(k===rp.moves.length&&rp.moves.length)document.body.classList.add('finale');
+  $('#result').hidden=true;rpShow();
+}
+async function rpNext(){
+  if(rp.k>=rp.moves.length||busy)return false;
+  const run=rp.run,m=dec(rp.moves[rp.k]);
+  await playMove(m,true);
+  if(!rp||run!==rp.run)return false;
+  rp.k++;rpShow();return true;
+}
+async function rpPlay(){
+  if(rp.auto){rp.auto=false;rpShow();return}
+  if(rp.k>=rp.moves.length)await rpSeek(0);
+  rp.auto=true;rpShow();const run=rp.run;
+  while(rp&&rp.auto&&run===rp.run){
+    if(!await rpNext())break;
+    await wait(350);
+  }
+  if(rp&&run===rp.run){rp.auto=false;rpShow()}
+}
+function startReplay(moves,info){
+  clearTimeout(pollT);
+  if(net&&net.mode==='pvp'&&net.status==='active')return;
+  rp={moves,k:0,auto:false,run:0,white:info&&info.white,black:info&&info.black,id:info&&info.id};
+  mode='replay';net=null;setFlip(false);
+  ['mAi','mNet','mTwo'].forEach(i=>$('#'+i).setAttribute('aria-pressed','false'));
+  resetLocal();hideLobby();
+  $('#result').hidden=true;$('#rpanel').hidden=false;$('#lvlSeg').hidden=true;
+  rp.run=0;rpBars();rpShow();
+  setStatus('Қайта көру','w');
+  rpPlay();
+}
+function exitReplay(){
+  rp=null;$('#rpanel').hidden=true;$('#pbTop').hidden=$('#pbBot').hidden=true;
+  setMode('ai');
+}
+$('#rpFirst').addEventListener('click',()=>rpSeek(0));
+$('#rpPrev').addEventListener('click',()=>rpSeek(rp.k-1));
+$('#rpNext').addEventListener('click',async()=>{rp.auto=false;await rpNext()});
+$('#rpLast').addEventListener('click',()=>rpSeek(rp.moves.length));
+$('#rpPlay').addEventListener('click',rpPlay);
+$('#rpBar').addEventListener('input',e=>rpSeek(+e.target.value));
+$('#rpExit').addEventListener('click',exitReplay);
+$('#resRep').addEventListener('click',()=>{
+  const mv=gameMoves();if(!mv.length)return;
+  startReplay(mv,net?{white:net.white,black:net.black,id:net.id}:{white:{name:'Күн'},black:{name:'Түн'}});
+});
+
+/* share card (PNG) */
+function shareCard(){
+  const W=1080,H=1350,c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');
+  const dark=!!winner&&winner==='b';
+  const g=x.createLinearGradient(0,0,0,H);
+  if(dark){g.addColorStop(0,'#141a4a');g.addColorStop(1,'#2a3280')}else{g.addColorStop(0,'#ffe9a8');g.addColorStop(1,'#9bd16a')}
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  x.fillStyle=dark?'rgba(255,255,255,.9)':'#3b2705';x.textAlign='center';
+  x.font='800 64px Unbounded, Nunito, system-ui, sans-serif';x.fillText('Жайлау Шайқасы',W/2,110);
+  const wn=rp?(rp.white&&rp.white.name):(net&&net.white?net.white.name:'Күн'),bn=rp?(rp.black&&rp.black.name):(net&&net.black?net.black.name:'Түн');
+  x.font='700 40px Nunito, system-ui, sans-serif';
+  x.fillText((wn||'Күн')+'  ⚔  '+(bn||'Түн'),W/2,185);
+  const sz=900;x.save();x.shadowColor='rgba(0,0,0,.45)';x.shadowBlur=40;x.shadowOffsetY=16;
+  x.drawImage(cv,90,230,sz,sz);x.restore();
+  x.font='800 56px Unbounded, Nunito, system-ui, sans-serif';
+  const t=winner?NAME[winner]+' жағы жеңді! '+(winner==='w'?'☀️':'🌙'):'Тең ойын';
+  x.fillText(t,W/2,1240);
+  x.font='600 34px Nunito, system-ui, sans-serif';x.globalAlpha=.8;
+  x.fillText(location.host,W/2,1305);
+  return c;
+}
+async function shareGame(){
+  const url=location.origin+((rp&&rp.id)||(net&&net.id)?'/?replay='+((rp&&rp.id)||net.id):'');
+  const text=winner?'Жайлау Шайқасы: '+NAME[winner]+' жағы жеңді! Ойынды қарап көр:':'Жайлау Шайқасы ойыны:';
+  let blob=null;
+  try{blob=await new Promise(r=>shareCard().toBlob(r,'image/png'))}catch(e){}
+  try{
+    if(blob&&navigator.canShare&&navigator.canShare({files:[new File([blob],'zhailau.png',{type:'image/png'})]})){
+      await navigator.share({files:[new File([blob],'zhailau.png',{type:'image/png'})],text,url});return;
+    }
+    if(navigator.share){await navigator.share({text,url});return}
+  }catch(e){if(e&&e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(url);PL().toast('🔗','Сілтеме көшірілді',url)}catch(e){PL().toast('🔗',url)}
+  if(blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='zhailau.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+}
+$('#resShare').addEventListener('click',shareGame);
+$('#rpShare').addEventListener('click',shareGame);
+
 function setMode(m,quiet){
+  if(rp){rp=null;$('#rpanel').hidden=true;$('#pbTop').hidden=$('#pbBot').hidden=true}
   if(net&&net.mode==='pvp'&&net.status==='active'&&m!=='net'){PL().toast('♟️','Алдымен онлайн ойынды аяқта','«Берілу» батырмасы бар');return}
   if(net&&net.mode==='pvp'&&net.status==='open'&&m!=='net'){napi({action:'cancel',id:net.id});net=null;clearTimeout(pollT)}
   if(net&&net.mode==='ai'&&m!=='ai')net=null;
@@ -1466,7 +1581,7 @@ async function startup(){
   refreshUI();
   const P=PL();
   await P.ready;
-  const jp=new URLSearchParams(location.search).get('join');
+  const qp=new URLSearchParams(location.search),jp=qp.get('join'),rid=qp.get('replay');
   let resumed=false;
   if(P.isIn()){
     const r=await napi(null,'?active=1');
@@ -1485,6 +1600,12 @@ async function startup(){
   if(jp){
     history.replaceState(null,'',location.pathname);
     if(P.isIn())joinCode(jp);else{P.toast('🔑','Ойынға қосылу үшін кіріңіз');P.login();const once=()=>{if(P.isIn()){joinCode(jp)}};P.onAuth(once,true)}
+  }
+  if(rid){
+    history.replaceState(null,'',location.pathname);
+    const r=await napi(null,'?id='+encodeURIComponent(rid));
+    if(r.match&&r.match.moves&&r.match.moves.length&&r.match.status==='done')startReplay(r.match.moves,r.match);
+    else P.toast('⚠️','Ойын табылмады немесе әлі аяқталмаған');
   }
   P.onAuth(st=>{
     if(st==='out'){if(net&&net.mode==='pvp')clearTimeout(pollT);net=null;if(mode==='net'){resetLocal();setFlip(false);showLobby('menu')}else newGame();renderBars();refreshUI()}

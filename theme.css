@@ -164,3 +164,16 @@ body.finale .hero-art .celestial{transform:translateY(120px);opacity:.15}
 .sky{transition:filter 2s}
 body.finale .sky{filter:brightness(.7) saturate(1.2)}
 .stage.cine canvas#cv{filter:contrast(1.1) saturate(1.2)}
+
+/* ---- replay ---- */
+.result{flex-wrap:wrap}
+.rbtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rbtns .btn{padding:8px 12px;font-size:.85rem}
+.rpanel{margin-top:10px;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,var(--panel),var(--panel2));border:2px solid var(--gold-d);display:grid;gap:8px}
+.rpbtns{display:flex;gap:8px;justify-content:center}
+.rpbtns button{min-width:44px;height:44px;border-radius:12px;border:2px solid var(--gold-d);background:var(--panel);color:var(--fg);font-size:1.05rem;cursor:pointer}
+.rpbtns button.main{background:linear-gradient(180deg,#ffd75e,#e8a91c);color:#3b2705;min-width:64px}
+.rpanel input[type=range]{width:100%;accent-color:#e8a91c}
+.rpinfo{display:flex;align-items:center;gap:8px;justify-content:space-between;font-weight:700;font-size:.9rem}
+.rpinfo .ghost{border:0;background:transparent;color:var(--fg);cursor:pointer;font:inherit;padding:6px 8px;border-radius:10px}
+.rpinfo .ghost:hover{background:rgba(127,127,127,.18)}
