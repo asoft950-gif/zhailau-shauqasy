@@ -6,6 +6,7 @@
 <title>Жайлау Шайқасы</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="platform.css">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&family=Unbounded:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -71,7 +72,10 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 <body>
 <main class="app">
   <header>
-    <h1>Жайлау Шайқасы</h1>
+    <div class="top">
+      <h1>Жайлау Шайқасы</h1>
+      <button class="acct out" id="acct" type="button">Кіру / Тіркелу</button>
+    </div>
     <p class="sub">Шахмат ережесі сол, бірақ фигуралар тірі. Әрқайсысы өз қабілетімен жүреді және жауын өз тәсілімен құлатады.</p>
   </header>
 
@@ -108,6 +112,9 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="cards" id="cards"></div>
   </section>
 </main>
+<div class="ov" id="ov" hidden><div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-label="Аккаунт"></div></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="platform.js" defer></script>
 
 <script>
 // ===ENGINE_START===
@@ -659,6 +666,7 @@ const stage=$('#stage');
 let S=360,T=40,pad=16,dpr=1,bg=document.createElement('canvas');
 let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
+let stat={moves:0,caps:0,byPiece:{},promos:0},reported=false;
 let hist=[],lost={w:[],b:[]},parts=[],shake=0,time=0,gen=0,idc=1;
 const odata={t:0,id:0,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false};
 
@@ -671,11 +679,11 @@ function mk(t,c,id,i,face){
   return p;
 }
 function snap(){
-  return {b:board.map(p=>p?{t:p.t,c:p.c,id:p.id,face:p.face}:null),turn,lost:{w:lost.w.slice(),b:lost.b.slice()},last:last&&{f:last.f,t:last.t}};
+  return {st:JSON.parse(JSON.stringify(stat)),b:board.map(p=>p?{t:p.t,c:p.c,id:p.id,face:p.face}:null),turn,lost:{w:lost.w.slice(),b:lost.b.slice()},last:last&&{f:last.f,t:last.t}};
 }
 function restoreSnap(s){
   board=s.b.map((p,i)=>p?mk(p.t,p.c,p.id,i,p.face):null);
-  turn=s.turn;lost={w:s.lost.w.slice(),b:s.lost.b.slice()};last=s.last;
+  turn=s.turn;lost={w:s.lost.w.slice(),b:s.lost.b.slice()};last=s.last;if(s.st)stat=JSON.parse(JSON.stringify(s.st));
   sel=-1;selMoves=[];over=false;winner=null;parts=[];
   $('#result').hidden=true;
   afterMove(true);
@@ -1061,6 +1069,10 @@ function showResult(){
   $('#resT').textContent=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   $('#resS').textContent=winner?'Мат: Батыр құлады.':(checked?'':'Жүріс қалмады, бірақ Батыр қауіпсіз.');
   $('#result').hidden=false;
+  if(mode==='ai'&&!reported&&window.Plat){
+    reported=true;
+    window.Plat.report({mode:'ai',side:'w',result:winner==='w'?'win':winner==='b'?'loss':'draw',moves:stat.moves,captures:stat.caps,lost:lost.w.length,byPiece:stat.byPiece,promos:stat.promos});
+  }
 }
 function setHint(p){
   const h=$('#hint');h.textContent='';
@@ -1076,6 +1088,7 @@ async function playMove(m){
   await animateMove(m);
   if(g!==gen)return;
   const a=board[m.f],v=board[m.t];
+  if(mode==='ai'&&a.c==='w'){stat.moves++;if(v){stat.caps++;stat.byPiece[a.t]=(stat.byPiece[a.t]||0)+1}if(m.promo)stat.promos++}
   if(v)lost[v.c].push(v.t);
   board[m.t]=a;board[m.f]=null;
   const face=a.face;rest(a,m.t>>3,m.t&7);a.face=face;
@@ -1095,7 +1108,7 @@ async function aiTurn(){
   await playMove(m);
 }
 function newGame(){
-  gen++;busy=false;over=false;winner=null;sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;
+  gen++;busy=false;over=false;winner=null;sel=-1;selMoves=[];last=null;hist=[];lost={w:[],b:[]};parts=[];turn='w';idc=1;stat={moves:0,caps:0,byPiece:{},promos:0};reported=false;
   board=new Array(64).fill(null);
   for(let c=0;c<8;c++){
     board[c]=mk(ORDER[c],'b',0,c);
@@ -1153,6 +1166,7 @@ for(const t of ['K','Q','R','B','N','P']){
   icons.push({cv:k,t,c:'w'});
 }
 
+window.__icon=(cvs,t,c)=>drawIcon(cvs,t,c,0);
 /* ---------- start ---------- */
 new ResizeObserver(layout).observe(stage);
 layout();
