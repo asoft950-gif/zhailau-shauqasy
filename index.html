@@ -278,6 +278,7 @@ function bestMove(b,col,depth){
 
 (()=>{
 'use strict';
+const SRC=document.currentScript.textContent;
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
     r=Math.min(r,w/2,h/2);
@@ -742,12 +743,35 @@ function layout(){
   cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);
   cv.style.height=S+'px';
   off.width=off.height=Math.ceil(T*2.6*dpr);
+  bakes=new Map();
   buildBoard();
 }
 const off=document.createElement('canvas');
 
 /* ---------- sprites ---------- */
+/* idle pieces are pre-rendered once (the vector art is expensive); animated ones are drawn live */
+let bakes=new Map();
+const BW=2.2,BH=1.5,BAX=1.1,BAY=1.35;
+function bake(t,col){
+  const k=t+col+T+'|'+dpr;let b=bakes.get(k);
+  if(b)return b;
+  b=document.createElement('canvas');
+  b.width=Math.ceil(T*BW*dpr);b.height=Math.ceil(T*BH*dpr);
+  const x=b.getContext('2d');
+  x.setTransform(dpr,0,0,dpr,0,0);x.translate(T*BAX,T*BAY);
+  const s=T/100*SC[t];x.scale(s,s);
+  x.lineJoin='round';x.lineCap='round';x.lineWidth=3;
+  DRAW[t](x,PAL[col],{t:0,id:1,ph:0,moving:false,strike:0,rear:0,wing:0,mood:'idle',blink:false});
+  bakes.set(k,b);return b;
+}
 function drawSprite(c,p,gx,gy,tm){
+  if(!p.strike&&!p.rear&&!p.wing&&!p.moving&&p.mood==='idle'){
+    c.save();c.translate(gx,gy);c.rotate(p.rot);
+    c.scale(p.face*p.sx,p.sy*(1+Math.sin(tm*2.4+p.id)*.008));
+    c.rotate(p.lean);
+    c.drawImage(bake(p.t,p.c),-T*BAX,-T*BAY,T*BW,T*BH);
+    c.restore();return;
+  }
   c.save();c.translate(gx,gy);
   c.rotate(p.rot);
   const s=T/100*SC[p.t];
@@ -889,6 +913,7 @@ function frame(now){
 /* ---------- small icons ---------- */
 function drawIcon(cvs,t,c,tm){
   const d=Math.min(2,window.devicePixelRatio||1),sz=cvs.clientWidth||cvs.width/d||28;
+  const ik=t+c+sz+'|'+d;if(cvs._ik===ik)return;cvs._ik=ik;
   if(cvs.width!==Math.round(sz*d)){cvs.width=Math.round(sz*d);cvs.height=Math.round(sz*d)}
   const x=cvs.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,sz,sz);
   x.translate(sz/2,sz*.9);
@@ -1099,12 +1124,30 @@ async function playMove(m){
   busy=false;
   if(!over&&mode==='ai'&&turn==='b')aiTurn();
 }
+/* the bot thinks in a Web Worker so the page never freezes */
+let aiW=null,aiSeq=0,aiPend={};
+try{
+  const a=SRC.indexOf('// ===ENGINE_START==='),b=SRC.indexOf('// ===ENGINE_END===');
+  const code=SRC.slice(a,b)+"\nonmessage=e=>{const d=e.data;postMessage({id:d.id,m:bestMove(d.b,d.col,d.depth)})};";
+  aiW=new Worker(URL.createObjectURL(new Blob([code],{type:'text/javascript'})));
+  aiW.onmessage=e=>{const f=aiPend[e.data.id];if(f){delete aiPend[e.data.id];f(e.data.m)}};
+  aiW.onerror=()=>{aiW=null;for(const k in aiPend){const f=aiPend[k];delete aiPend[k];f(undefined)}};
+}catch(e){aiW=null}
+function aiMove(col,depth){
+  const sync=()=>bestMove(board,col,depth);
+  if(!aiW)return Promise.resolve(sync());
+  return new Promise(res=>{
+    const id=++aiSeq;aiPend[id]=m=>res(m===undefined?sync():m);
+    aiW.postMessage({id,b:board.map(p=>p?{t:p.t,c:p.c,id:p.id}:null),col,depth});
+  });
+}
 async function aiTurn(){
   const g=gen;busy=true;
   setStatus('Түн ойланып жатыр…','b');
   await wait(500);
   if(g!==gen)return;
-  const m=bestMove(board,'b',3);
+  const m=await aiMove('b',3);
+  if(g!==gen)return;
   if(!m){busy=false;return}
   await playMove(m);
 }
