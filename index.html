@@ -608,7 +608,9 @@ let board=new Array(64).fill(null);
 let turn='w',mode='ai',busy=false,over=false,winner=null,sel=-1,selMoves=[],allMoves=[],checked=false,last=null;
 const SKS=makeSkins({E,Fill,RR,Tube,mixc,lit,drk,TAU});
 SKS.beast={name:'Жайлау',pal:PAL,draw:DRAW,sc:SC};
-let pskin={w:'knights',b:'knights'};
+const LSK=(k,ok,d)=>{try{const v=localStorage.getItem(k);return ok.includes(v)?v:d}catch(e){return d}};
+const selBoard=()=>LSK('zh-board',['meadow','forest'],'meadow'),selPieces=()=>LSK('zh-pieces',['knights','elves'],'knights');
+let pskin={w:selPieces(),b:selPieces()};
 const skO=c=>SKS[pskin[c]]||SKS.knights;
 const palO=c=>skO(c).pal[c],scO=(c,t)=>(skO(c).sc&&skO(c).sc[t])||SC[t],drawO=(c,t)=>skO(c).draw[t];
 const NM=(c,t)=>{const k=skO(c);return k.names?k.names[t]:INFO[t].name};
@@ -646,25 +648,27 @@ const SKINS={
   sand:{f:['#6B4423','#3F2512'],l:'#EBCF92',d:'#C9A25A',LB:['#F7E4B0','#DDB96F','#F2D79C'],DB:['#B88C45','#D4AD64','#A97C38'],fl:['#8A5A2B','#C98A4B','#6B4423','#A06A33'],fc:'#5C3A1A',ov:['rgba(255,240,190,.15)','rgba(110,60,0,.12)']},
   royal:{f:['#3A1219','#1A0509'],l:'#EBC96A',d:'#7B1F2F',LB:['#FFE9A0','#D9B34D','#F6D87E'],DB:['#A6354A','#8A2538','#BC4A5F'],fl:['#FFE9A0','#FFFFFF','#F6D87E','#FFE9A0'],fc:'#B88A1F',ov:['rgba(255,235,160,.16)','rgba(60,0,10,.2)']}
 };
-SKINS.meadow=SKINS.grass;
-let skinName='meadow';
+SKINS.meadow=SKINS.grass;SKINS.forest=SKINS.grass;
+let skinName=selBoard();
 /* Royal Meadow board: hand-painted base + animated ambient sprites (crop of the 1280px source, 80px trimmed; grid at 112px) */
-const MEAD={ok:false,img:null,fx:null,D:{"ef":[[3,0.5,0.84],[3,0.5,0.84],[6,0.5,0.5],[3,0.5,0.5]],"xy":[[[0,0],[256,0],[512,0],[768,0]],[[0,256],[256,256],[512,256],[768,256]],[[0,512],[256,512],[512,512],[768,512]],[[0,768],[256,768],[512,768],[768,768]]],"pl":[[0,130,309,48,3,0,0,0],[0,354,309,48,1,0,0,0],[0,578,309,48,3,0,0,0],[0,802,309,48,1,0,0,0],[0,242,421,48,3,0,0,0],[0,466,421,48,1,0,0,0],[0,690,421,48,3,0,0,0],[0,914,421,48,1,0,0,0],[0,130,533,48,1,0,0,0],[0,354,533,48,3,0,0,0],[0,578,533,48,1,0,0,0],[0,802,533,48,3,0,0,0],[0,242,645,48,1,0,0,0],[0,466,645,48,3,0,0,0],[0,690,645,48,1,0,0,0],[0,914,645,48,3,0,0,0],[0,130,757,48,3,0,0,0],[0,354,757,48,1,0,0,0],[0,578,757,48,3,0,0,0],[0,802,757,48,1,0,0,0],[0,242,869,48,3,0,0,0],[0,466,869,48,1,0,0,0],[0,690,869,48,3,0,0,0],[0,914,869,48,1,0,0,0],[0,5,215,82,0,0,0,0],[0,2,530,82,1,0,0,0],[0,0,865,82,2,0,0,0],[0,1115,210,82,3,0,0,0],[0,1116,555,82,0,0,0,0],[0,1110,865,82,1,0,0,0],[0,272,2,82,2,0,0,0],[0,740,6,82,3,0,0,0],[0,268,1116,82,0,0,0,0],[0,800,1110,82,1,0,0,0],[1,145,22,73,1,0,0,0],[1,475,25,73,2,0,0,0],[1,954,40,73,3,0,0,0],[1,22,692,73,0,0,0,0],[1,1105,751,73,1,0,0,0],[1,505,1110,73,2,0,0,0],[2,160,50,64,0,8,5,1],[2,610,45,64,1,8,5,1],[2,1070,340,64,2,8,5,1],[2,1060,930,64,3,8,5,1],[2,430,1066,64,0,8,5,1],[2,50,455,64,1,8,5,1],[3,1100,458,60,0,9,11,0],[3,30,270,60,1,9,11,0],[3,718,1100,60,2,9,11,0]]}};
-function loadMeadow(){
-  if(MEAD.img)return;
-  let n=0;const done=()=>{if(++n===2){MEAD.ok=true;if(skinName==='meadow')buildBoard()}};
-  MEAD.img=new Image();MEAD.img.onload=done;MEAD.img.src='skins/meadow/base.webp';
-  MEAD.fx=new Image();MEAD.fx.onload=done;MEAD.fx.src='skins/meadow/fx.webp';
+const IMGB={meadow:{ok:false,img:null,fx:null,W:1120,D:{"ef":[[3,0.5,0.84],[3,0.5,0.84],[6,0.5,0.5],[3,0.5,0.5]],"xy":[[[0,0],[256,0],[512,0],[768,0]],[[0,256],[256,256],[512,256],[768,256]],[[0,512],[256,512],[512,512],[768,512]],[[0,768],[256,768],[512,768],[768,768]]],"pl":[[0,130,309,48,3,0,0,0],[0,354,309,48,1,0,0,0],[0,578,309,48,3,0,0,0],[0,802,309,48,1,0,0,0],[0,242,421,48,3,0,0,0],[0,466,421,48,1,0,0,0],[0,690,421,48,3,0,0,0],[0,914,421,48,1,0,0,0],[0,130,533,48,1,0,0,0],[0,354,533,48,3,0,0,0],[0,578,533,48,1,0,0,0],[0,802,533,48,3,0,0,0],[0,242,645,48,1,0,0,0],[0,466,645,48,3,0,0,0],[0,690,645,48,1,0,0,0],[0,914,645,48,3,0,0,0],[0,130,757,48,3,0,0,0],[0,354,757,48,1,0,0,0],[0,578,757,48,3,0,0,0],[0,802,757,48,1,0,0,0],[0,242,869,48,3,0,0,0],[0,466,869,48,1,0,0,0],[0,690,869,48,3,0,0,0],[0,914,869,48,1,0,0,0],[0,5,215,82,0,0,0,0],[0,2,530,82,1,0,0,0],[0,0,865,82,2,0,0,0],[0,1115,210,82,3,0,0,0],[0,1116,555,82,0,0,0,0],[0,1110,865,82,1,0,0,0],[0,272,2,82,2,0,0,0],[0,740,6,82,3,0,0,0],[0,268,1116,82,0,0,0,0],[0,800,1110,82,1,0,0,0],[1,145,22,73,1,0,0,0],[1,475,25,73,2,0,0,0],[1,954,40,73,3,0,0,0],[1,22,692,73,0,0,0,0],[1,1105,751,73,1,0,0,0],[1,505,1110,73,2,0,0,0],[2,160,50,64,0,8,5,1],[2,610,45,64,1,8,5,1],[2,1070,340,64,2,8,5,1],[2,1060,930,64,3,8,5,1],[2,430,1066,64,0,8,5,1],[2,50,455,64,1,8,5,1],[3,1100,458,60,0,9,11,0],[3,30,270,60,1,9,11,0],[3,718,1100,60,2,9,11,0]]}},
+ forest:{ok:false,img:null,fx:null,W:1000,D:{"ef":[[3,0.5,0.84],[3,0.5,0.84],[6,0.5,0.5],[3,0.5,0.5]],"xy":[[[0,0],[256,0],[512,0],[768,0]],[[0,256],[256,256],[512,256],[768,256]],[[0,512],[256,512],[512,512],[768,512]],[[0,768],[256,768],[512,768],[768,768]]],"pl":[[0,118,289,48,3,0,0,0],[0,318,289,48,1,0,0,0],[0,518,289,48,3,0,0,0],[0,718,289,48,1,0,0,0],[0,218,389,48,3,0,0,0],[0,418,389,48,1,0,0,0],[0,618,389,48,3,0,0,0],[0,818,389,48,1,0,0,0],[0,118,489,48,1,0,0,0],[0,318,489,48,3,0,0,0],[0,518,489,48,1,0,0,0],[0,718,489,48,3,0,0,0],[0,218,589,48,1,0,0,0],[0,418,589,48,3,0,0,0],[0,618,589,48,1,0,0,0],[0,818,589,48,3,0,0,0],[0,118,689,48,3,0,0,0],[0,318,689,48,1,0,0,0],[0,518,689,48,3,0,0,0],[0,718,689,48,1,0,0,0],[0,218,789,48,3,0,0,0],[0,418,789,48,1,0,0,0],[0,618,789,48,3,0,0,0],[0,818,789,48,1,0,0,0],[1,415,-19,73,2,0,0,0],[1,894,-4,73,3,0,0,0],[2,100,6,64,0,8,5,1],[2,550,1,64,1,8,5,1],[2,1010,296,64,2,8,5,1],[2,1000,886,64,3,8,5,1],[2,370,1022,64,0,8,5,1],[2,-10,411,64,1,8,5,1]]}}};
+const isImgB=n=>!!IMGB[n];
+function loadMeadow(n){
+  n=n||skinName;const M=IMGB[n];if(!M||M.img)return;
+  let k=0;const done=()=>{if(++k===2){M.ok=true;if(skinName===n)buildBoard()}};
+  M.img=new Image();M.img.onload=done;M.img.src='skins/'+n+'/base.webp';
+  M.fx=new Image();M.fx.onload=done;M.fx.src='skins/'+n+'/fx.webp';
 }
-loadMeadow();
+loadMeadow('meadow');
 function drawMeadowFx(tm){
-  if(skinName!=='meadow'||!MEAD.ok)return;
-  const D=MEAD.D,k=S/1120,P=Math.PI*2*tm/1.3333,t=REDUCE?0:tm;
+  const M=IMGB[skinName];if(!M||!M.ok)return;
+  const D=M.D,k=S/M.W,P=Math.PI*2*tm/1.3333,t=REDUCE?0:tm;
   for(const p of D.pl){
     const e=D.ef[p[0]],fr=D.xy[p[0]],i=Math.floor(t*e[0]+p[4])%4,a=P+p[4]*1.7;
     const x=(p[1]+Math.cos(a)*p[5])*k,y=(p[2]+Math.sin(a)*p[6])*k,sz=p[3]*k;
     ctx.globalAlpha=p[7]?.72+.28*(.5+.5*Math.sin(a)):1;
-    ctx.drawImage(MEAD.fx,fr[i][0],fr[i][1],256,256,x-sz*e[1],y-sz*e[2],sz,sz);
+    ctx.drawImage(M.fx,fr[i][0],fr[i][1],256,256,x-sz*e[1],y-sz*e[2],sz,sz);
   }
   ctx.globalAlpha=1;
 }
@@ -672,8 +676,8 @@ function buildBoard(){
   const SK=SKINS[skinName]||SKINS.grass;
   bg.width=Math.round(S*dpr);bg.height=Math.round(S*dpr);
   const c=bg.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
-  if(skinName==='meadow'&&MEAD.ok){
-    c.drawImage(MEAD.img,0,0,S,S);
+  if(isImgB(skinName)&&IMGB[skinName].ok){
+    c.drawImage(IMGB[skinName].img,0,0,S,S);
     c.font='800 '+Math.max(9,pad*.5)+'px Nunito, sans-serif';c.textAlign='center';c.textBaseline='middle';c.lineJoin='round';c.lineWidth=3;c.strokeStyle='rgba(30,22,8,.85)';c.fillStyle='#F8E7A8';
     for(let i=0;i<8;i++){const f='abcdefgh'[flip?7-i:i],r=String(flip?i+1:8-i);
       c.strokeText(f,pad+(i+.5)*T,S-pad*.42);c.fillText(f,pad+(i+.5)*T,S-pad*.42);
@@ -729,7 +733,7 @@ function layout(){
   const w=Math.floor(stage.clientWidth);
   if(!w)return;
   dpr=Math.min(2,window.devicePixelRatio||1);
-  S=w;pad=Math.round(S*(skinName==='meadow'?.1:.045));T=(S-2*pad)/8;
+  S=w;pad=Math.round(S*(isImgB(skinName)?.1:.045));T=(S-2*pad)/8;
   cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);
   cv.style.height=S+'px';
   off.width=off.height=Math.ceil(T*2.6*dpr);
@@ -2255,11 +2259,12 @@ function renderCards(){
 }
 renderCards();
 
-window.__setSkin=n=>{if(SKINS[n]&&n!==skinName){skinName=n;if(n==='meadow')loadMeadow();layout()}};
+window.__setSkin=n=>{if(SKINS[n]&&n!==skinName){skinName=n;if(isImgB(n))loadMeadow(n);layout()}};
 window.__icon=(cvs,t,c)=>drawIcon(cvs,t,c,0);
-function applyPSkins(){ /* only the Royal Knights set is enabled */
-  if(pskin.w==='knights'&&pskin.b==='knights')return;
-  pskin={w:'knights',b:'knights'};
+function applyPSkins(){ /* enabled sets: Royal Knights, Sun & Moon elves (chosen in the shop tab) */
+  const n=selPieces();
+  if(pskin.w===n&&pskin.b===n)return;
+  pskin={w:n,b:n};bakes.clear();
   renderLost();renderBars();renderCards();setHint(sel>=0?board[sel]:null);
   for(const ic of icons)ic.cv._ik='';
 }
@@ -2274,7 +2279,7 @@ window.__iconSkin=(cvs,id,t,c)=>{
   if(sk.pending&&sk.pending(t)&&(cvs._rt=(cvs._rt||0)+1)<12)setTimeout(()=>window.__iconSkin(cvs,id,t,c),350);
 };
 window.__forceSkin=n=>{pskin={w:n,b:n};renderCards();renderLost();for(const ic of icons)ic.cv._ik='';bakes.clear()};
-function applySkin(){applyPSkins();const P=PL();window.__setSkin('meadow')}
+function applySkin(){applyPSkins();const P=PL();window.__setSkin(selBoard())}
 async function startup(){
   refreshUI();
   const P=PL();

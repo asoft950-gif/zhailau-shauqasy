@@ -537,16 +537,25 @@ function renderDaily(b){
   b.append(ul);
   b.append(el('p','xpt','Тиын әр рейтингті ойыннан және жетістіктен беріледі.'));
 }
-const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі'],meadow:['🌳','Корольдік шалғын']};
+const SKN={grass:['🌿','Жайлау'],night:['🌙','Түнгі дала'],snow:['❄️','Қысқы дала'],sand:['🏜️','Шөл'],royal:['👑','Хан кілемі'],meadow:['🌳','Корольдік шалғын'],forest:['🌲','Күн мен Ай тоғайы']};
+const LS2=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
 function renderShop(b){
   b.append(el('p','coins','🪙 '+me.coins+' тиын'));
-  b.append(el('p','xpt','Тақта және фигура терілері'));
-  const g=el('div','agrid');
-  for(const [ic,nm,ds] of [['🌳','Корольдік шалғын','Тірі тақта: шөп, гүл, жарық қоңыз'],['⚔️','Корольдік гвардия','Күміс және қызыл рыцарьлар']]){
-    const c=el('div','ach got skin on');c.append(el('div','ic',ic),el('b','',nm),el('span','',ds),el('button','btn','Қолданылуда'));c.lastChild.disabled=true;g.append(c);
-  }
-  b.append(g);
-  b.append(el('p','xpt','Басқа терілер әзірше өшірулі.'));
+  const grp=(title,key,def,items)=>{
+    b.append(el('p','xpt',title));
+    const g=el('div','agrid'),cur=LS2(key,def);
+    for(const [id,ic,nm,ds] of items){
+      const on=cur===id,c=el('div','ach got skin'+(on?' on':''));
+      c.append(el('div','ic',ic),el('b','',nm),el('span','',ds));
+      const bt=el('button','btn',on?'Қолданылуда':'Таңдау');bt.disabled=on;
+      bt.onclick=()=>{try{localStorage.setItem(key,id)}catch(e){}fireAuth('skin');profileView('shop')};
+      c.append(bt);g.append(c);
+    }
+    b.append(g);
+  };
+  grp('Тақта','zh-board','meadow',[['meadow','🌳','Корольдік шалғын','Тірі тақта: шөп, гүл, жарық қоңыз'],['forest','🌲','Күн мен Ай тоғайы','Түнгі орман: жарық қоңыздар, жапырақтар']]);
+  grp('Фигуралар','zh-pieces','knights',[['knights','⚔️','Корольдік гвардия','Күміс және қызыл рыцарьлар'],['elves','🧝','Күн мен Ай орманы','Күн және Ай эльфтері']]);
+  b.append(el('p','xpt','Таңдау осы құрылғыда сақталады. Басқа терілер әзірше өшірулі.'));
 }
 async function renderCup(b,period){
   const sg=el('div','seg');
@@ -568,7 +577,7 @@ async function renderCup(b,period){
   }
   b.append(t);
 }
-const PSN={classic:['♟️','Классика'],beast:['🐇','Жайлау жануарлары'],heroes:['🛡️','Батырлар'],alien:['👽','Инопланетяндар'],space:['🚀','Ғарыш сарбаздары'],dark:['💀','Dark fantasy'],light:['🦄','Light fantasy'],knights:['⚔️','Корольдік гвардия']};
+const PSN={classic:['♟️','Классика'],beast:['🐇','Жайлау жануарлары'],heroes:['🛡️','Батырлар'],alien:['👽','Инопланетяндар'],space:['🚀','Ғарыш сарбаздары'],dark:['💀','Dark fantasy'],light:['🦄','Light fantasy'],knights:['⚔️','Корольдік гвардия'],elves:['🧝','Күн мен Ай орманы']};
 function renderPieceShop(b){
   b.append(el('p','xpt','Фигура скиндері: жетістікпен ашылады немесе тиынға сатып алынады'));
   const own=new Set(data.punlocked||[]),cur=me.skins.piece||'beast';
@@ -757,7 +766,7 @@ function init(){
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
   ready.then(r=>{const mt=/^#cab-(\w+)$/.exec(location.hash);if(mt&&r&&r.user)profileView(['profile','fr','clan','daily','shop','cup','ach','top','set','adm'].includes(mt[1])?mt[1]:'profile')});
-  window.Plat={pskin:()=>'knights',skin:()=>'meadow',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
+  window.Plat={pskin:()=>LS2('zh-pieces','knights'),skin:()=>LS2('zh-board','meadow'),api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
 })();
