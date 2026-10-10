@@ -135,6 +135,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 
   <div class="pbar" id="pbBot" hidden></div>
     <div class="emobar" id="emobar" hidden></div>
+    <div class="winfo" id="wInfo" hidden></div>
   <p class="hint" id="hint"></p>
   </div>
 
@@ -1297,7 +1298,7 @@ function renderBars(){
 }
 function refreshUI(){
   applyPSkins();
-  renderEmo();
+  renderEmo();renderWatchInfo();
   $('#bUndo').hidden=!!net||mode==='net'||mode==='puz';
   $('#bResign').hidden=!(net&&net.you&&net.status==='active');
   $('#lvlSeg').hidden=mode!=='ai'||campStage>0;
@@ -1316,7 +1317,7 @@ setInterval(updateClaim,5000);
 /* ---- server games ---- */
 function adoptNet(m){
   clearTimeout(pollT);
-  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0};
+  net={id:m.id,code:m.code,mode:m.mode,level:m.level,you:m.you,status:m.status,ver:m.ver,moves:m.moves.slice(),applied:0,white:m.white,black:m.black,winner:m.winner,reason:m.reason,award:m.award,awardShown:false,tries:0,cseq:m.cseq||0,tc:m.tc||0,camp:m.camp||0,watchers:m.watchers||0};
   setClk(m);
   lastChange=Date.now();
 }
@@ -1336,7 +1337,7 @@ function netApply(m){
   if(!net||m.id!==net.id)return;
   const was=net.status;
   if(m.ver!==net.ver)lastChange=Date.now();
-  net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;
+  net.status=m.status;net.ver=m.ver;net.white=m.white;net.black=m.black;net.winner=m.winner;net.reason=m.reason;net.award=m.award;net.watchers=m.watchers||0;
   setClk(m);
   if(m.chat){for(const c of m.chat)if(c.n>net.cseq)showEmote(c);net.cseq=m.cseq||net.cseq}
   if(m.moves.length>=net.moves.length)net.moves=m.moves.slice();
@@ -1380,7 +1381,19 @@ async function pollOnce(){
   if(!n||n.mode!=='pvp')return;
   const r=await napi(null,'?id='+n.id+'&v='+n.ver+'&c='+(n.cseq||0));
   if(net!==n)return;
+  if(r.same&&r.watchers!=null&&r.watchers!==n.watchers){n.watchers=r.watchers;renderWatchInfo()}
   if(r.match)netApply(r.match);
+  if(n.status==='open'&&n.public&&Date.now()-(n.qAt||0)>6000){
+    n.qAt=Date.now();
+    const q=await napi({action:'quick',tc:n.tc||0,retry:1});
+    if(net!==n)return;
+    if(q.match&&q.match.id!==n.id){
+      adoptNet(q.match);net.public=false;
+      if(q.match.status==='active'){hideLobby();resetLocal();setFlip(net.you==='b');snd('start');renderBars();refreshUI()}
+      startPoll();return;
+    }
+    if(q.gap){n.gap=q.gap;const g=$('#gapTxt');if(g)g.textContent='Рейтинг айырмасы: ±'+q.gap+' (уақыт өткен сайын кеңейеді)'}
+  }
   if(n.status==='done'){if(!n.award&&n.moves.length>=8&&n.tries++<4)startPoll();return}
   startPoll();
 }
@@ -1430,6 +1443,7 @@ function showLobby(kind){
   if(kind==='wait'&&net){
     card.append(el('h3','',net.code&&!net.public?'Дос күтілуде…':'Қарсылас іздеп жатырмыз…'));
     const sp=el('div','spin');card.append(sp);
+    if(net.public){const g=el('p','xpt','Рейтинг айырмасы: ±150 (уақыт өткен сайын кеңейеді)');g.id='gapTxt';card.append(g)}
     if(net.code&&net.showCode){
       card.append(el('p','','Досыңа осы кодты жібер:'));
       card.append(el('div','code',net.code));
@@ -1568,6 +1582,21 @@ function showEmote(c){
     snd('select');
   }
 }
+function renderWatchInfo(){
+  const box=$('#wInfo');if(!box)return;
+  const on=!!net&&net.mode==='pvp'&&net.status==='active';
+  box.hidden=!on;
+  if(!on)return;
+  box.textContent='';
+  box.append(el('span','',(net.watchers>0?'👁 '+net.watchers+' көрермен':'👁 көрермен жоқ')));
+  const b=el('button','btn ghost sm','🔗 Көруге шақыру');b.type='button';
+  b.onclick=async()=>{
+    const lk=location.origin+'/?watch='+net.id;
+    try{if(navigator.share){await navigator.share({title:'Жайлау Шайқасы',text:'Осы ойынды тікелей көр!',url:lk});return}}catch(e){if(e&&e.name==='AbortError')return}
+    try{await navigator.clipboard.writeText(lk);PL().toast('📋','Көшірілді',lk)}catch(e){PL().toast('📋','Сілтеме',lk,null,9000)}
+  };
+  box.append(b);
+}
 async function watchMatch(id){
   const r=await napi(null,'?id='+encodeURIComponent(id));
   const m=r.match;
@@ -1581,13 +1610,24 @@ async function watchMatch(id){
   setStatus('Бақылаушы · '+NAME[turn]+' жүрісі',turn);
   PL().toast('👁️','Тікелей көріп отырсың','Реакция жібере аласың');
 }
+const TCN=t=>t?(t/60)+' мин':'∞';
 async function loadLive(card){
-  const r=await PL().api('match?live=1');
-  if(!r.live||!r.live.length)return;
-  const h=el('h4','','🔴 Тікелей ойындар');card.append(h);
-  for(const g of r.live){
-    const b=el('button','btn ghost live',(g.wn||'?')+' ⚔ '+(g.bn||'?')+' · '+g.plies+' жүріс');
-    b.onclick=()=>watchMatch(g.id);card.append(b);
+  const [r,rc]=await Promise.all([PL().api('match?live=1'),PL().api('match?recent=1')]);
+  if(r.live&&r.live.length){
+    card.append(el('h4','','🔴 Тікелей ойындар'));
+    r.live.forEach((g,i)=>{
+      const b=el('button','btn ghost live'+(i===0?' hot':''),(i===0?'🔥 ':'')+(g.wn||'?')+' ('+g.wr+') ⚔ '+(g.bn||'?')+' ('+g.br+') · '+g.plies+' жүріс · '+TCN(g.tc)+(g.wc?' · 👁 '+g.wc:''));
+      b.onclick=()=>watchMatch(g.id);card.append(b);
+    });
+  }
+  if(rc.recent&&rc.recent.length){
+    card.append(el('h4','','🎞 Соңғы ойындар'));
+    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең'};
+    for(const g of rc.recent){
+      const w=g.winner==='w'?'🏆 ':'',bl=g.winner==='b'?'🏆 ':'';
+      const b=el('button','btn ghost live',w+g.wn+' ⚔ '+bl+g.bn+' · '+g.plies+' жүріс · '+(RN[g.reason]||g.reason));
+      b.onclick=()=>watchMatch(g.id);card.append(b);
+    }
   }
 }
 

@@ -54,13 +54,14 @@ async function who(id) {
   return r[0] || null;
 }
 const cseqOf = (m) => { const c = m.chat || []; return c.length ? c[c.length - 1].n : 0; };
+const watchersOf = async (id) => (await sql.query("SELECT count(*)::int AS n FROM watchers WHERE match_id=$1 AND seen > now() - interval '15 seconds'", [id]))[0].n;
 async function view(m, uid) {
   const [w, b] = await Promise.all([who(m.white_id), who(m.black_id)]);
   const you = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
   const pub = (u) => u && { id: u.id, name: u.username, avatar: u.avatar, role: u.role, rating: u.rating, skin: (u.skins && u.skins.piece) || 'beast' };
   return {
     id: m.id, code: m.code, mode: m.mode, level: m.level, status: m.status, winner: m.winner, reason: m.reason,
-    moves: m.moves, turn: turnOf(m.moves), ver: m.ver, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
+    moves: m.moves, turn: turnOf(m.moves), ver: m.ver, watchers: m.status === 'active' && m.mode === 'pvp' ? await watchersOf(m.id) : 0, tc: m.tc || 0, clock: clockNow(m), camp: m.camp || 0, chat: m.chat || [], cseq: cseqOf(m), you, award: (you && m.awards && m.awards[you]) || null,
     white: pub(w) || { name: 'Күтілуде…', avatar: null },
     black: m.mode === 'ai' ? { name: ['', 'Бот · жеңіл', 'Бот · орташа', 'Бот · қиын'][m.level] || 'Бот', avatar: null, bot: true } : (pub(b) || { name: 'Күтілуде…', avatar: null })
   };
@@ -74,7 +75,7 @@ async function finish(m, winner, reason) {
   if (!r.length) return null;
   const row = r[0];
   const { log } = replay(row.moves);
-  const rated = row.moves.length >= 8;
+  const rated = row.moves.length >= 8 || (row.mode === 'pvp' && ['timeout', 'time'].includes(reason) && row.moves.length >= 2);
   const awards = {};
   if (rated) {
     const res = (side) => (winner === null ? 'draw' : winner === side ? 'win' : 'loss');
@@ -119,15 +120,30 @@ export default async function handler(req, res) {
         return send(res, 200, { match: am && am.status !== 'done' ? await view(am, uid) : (am ? await view(am, uid) : null) });
       }
       if (req.query?.live) {
-        const r = await sql.query("SELECT m.id, jsonb_array_length(m.moves) AS plies, w.username AS wn, b.username AS bn, w.rating AS wr, b.rating AS br FROM matches m JOIN users w ON w.id=m.white_id JOIN users b ON b.id=m.black_id WHERE m.mode='pvp' AND m.status='active' AND m.updated_at > now() - interval '3 minutes' ORDER BY m.updated_at DESC LIMIT 8");
+        const r = await sql.query(`SELECT m.id, jsonb_array_length(m.moves)::int AS plies, m.tc, w.username AS wn, b.username AS bn, w.rating AS wr, b.rating AS br,
+            (SELECT count(*)::int FROM watchers x WHERE x.match_id=m.id AND x.seen > now() - interval '15 seconds') AS wc
+          FROM matches m JOIN users w ON w.id=m.white_id JOIN users b ON b.id=m.black_id
+          WHERE m.mode='pvp' AND m.status='active' AND m.updated_at > now() - interval '3 minutes'
+          ORDER BY (w.rating + b.rating) DESC, m.updated_at DESC LIMIT 8`);
         return send(res, 200, { live: r });
+      }
+      if (req.query?.recent) {
+        const r = await sql.query(`SELECT m.id, jsonb_array_length(m.moves)::int AS plies, m.winner, m.reason, m.tc, w.username AS wn, b.username AS bn, w.rating AS wr, b.rating AS br, m.updated_at
+          FROM matches m JOIN users w ON w.id=m.white_id JOIN users b ON b.id=m.black_id
+          WHERE m.mode='pvp' AND m.status='done' AND jsonb_array_length(m.moves) >= 16 AND m.updated_at > now() - interval '3 days'
+          ORDER BY (m.reason='mate') DESC, m.updated_at DESC LIMIT 6`);
+        return send(res, 200, { recent: r });
       }
       let m = await load(Number(req.query?.id));
       if (!m) return send(res, 404, { error: 'Ойын табылмады' });
       m = await flagCheck(m);
       const seat = uid && m.white_id === uid ? 'w' : uid && m.black_id === uid ? 'b' : null;
       if (seat && m.status !== 'done') sql.query(`UPDATE matches SET seen_${seat}=now() WHERE id=$1`, [m.id]).catch(() => {});
-      if (req.query?.v !== undefined && Number(req.query.v) === m.ver && Number(req.query.c || 0) === cseqOf(m)) return send(res, 200, { same: true, ver: m.ver });
+      if (!seat && m.status === 'active' && m.mode === 'pvp') {
+        const k = uid ? 'u' + uid : 'i' + crypto.createHash('sha1').update(String(req.headers['x-forwarded-for'] || '') + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 12);
+        await sql.query('INSERT INTO watchers (match_id,k,seen) VALUES ($1,$2,now()) ON CONFLICT (match_id,k) DO UPDATE SET seen=now()', [m.id, k]);
+      }
+      if (req.query?.v !== undefined && Number(req.query.v) === m.ver && Number(req.query.c || 0) === cseqOf(m)) return send(res, 200, { same: true, ver: m.ver, watchers: m.status === 'active' ? await watchersOf(m.id) : 0 });
       return send(res, 200, { match: await view(m, uid) });
     }
     if (req.method !== 'POST' || !needJson(req)) return send(res, 405, { error: 'method' });
@@ -162,15 +178,29 @@ export default async function handler(req, res) {
       return send(res, 200, { match: await view(r[0], uid), awards: null });
     }
     if (b.action === 'quick' || b.action === 'create') {
-      if (await limited(req, 'newpvp', 40, 600)) return send(res, 429, { error: 'Тым жиі' });
-      await cancelOwnOpen(uid);
+      if (await limited(req, b.retry ? 'qretry' : 'newpvp', b.retry ? 160 : 40, 600)) return send(res, 429, { error: 'Тым жиі' });
       const tc = TCS.includes(Number(b.tc)) ? Number(b.tc) : 0;
+      let own = null;
       if (b.action === 'quick') {
+        own = (await sql.query("SELECT * FROM matches WHERE status='open' AND is_public AND mode='pvp' AND white_id=$1 AND tc=$2 AND created_at > now() - interval '5 minutes'", [uid, tc]))[0] || null;
+      }
+      if (!own) await cancelOwnOpen(uid);
+      if (b.action === 'quick') {
+        /* rating-aware pairing: the allowed rating gap grows the longer someone waits (150 + 25 per second, so ~2 min for anyone) */
+        const waited = own ? Math.max(0, (Date.now() - new Date(own.created_at).getTime()) / 1000) : 0;
+        const me = (await sql.query('SELECT rating FROM users WHERE id=$1', [uid]))[0].rating;
         const j = await sql.query(
           `UPDATE matches SET black_id=$1, status='active', ver=ver+1, updated_at=now(), seen_w=now(), seen_b=now(), cw=tc*1000, cb=tc*1000, turn_at=now()
-           WHERE id = (SELECT id FROM matches WHERE status='open' AND is_public AND mode='pvp' AND tc=$2 AND white_id IS NOT NULL AND white_id<>$1 AND created_at > now() - interval '5 minutes' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-           AND status='open' RETURNING *`, [uid, tc]);
-        if (j.length) return send(res, 200, { match: await view(j[0], uid) });
+           WHERE id = (SELECT m.id FROM matches m JOIN users u ON u.id=m.white_id
+             WHERE m.status='open' AND m.is_public AND m.mode='pvp' AND m.tc=$2 AND m.white_id<>$1 AND m.created_at > now() - interval '5 minutes'
+               AND abs(u.rating - $3) <= 150 + 25 * GREATEST(EXTRACT(EPOCH FROM (now() - m.created_at)), $4::float)
+             ORDER BY abs(u.rating - $3), m.created_at LIMIT 1 FOR UPDATE OF m SKIP LOCKED)
+           AND status='open' RETURNING *`, [uid, tc, me, waited]);
+        if (j.length) {
+          if (own) await sql.query("DELETE FROM matches WHERE id=$1 AND status='open'", [own.id]);
+          return send(res, 200, { match: await view(j[0], uid) });
+        }
+        if (own) return send(res, 200, { match: await view(own, uid), searching: true, gap: Math.round(150 + 25 * waited) });
       }
       const pub = b.action === 'quick';
       const asBlack = !pub && Math.random() < .5;
