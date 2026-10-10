@@ -194,6 +194,12 @@ export function startBoard() {
   b[64] = 15; b[65] = -1;
   return b;
 }
+/* position identity for threefold repetition: pieces + side to move + castling rights */
+export function posKey(b, turn, castle) {
+  let k = turn + (castle === undefined ? b[64] : castle) + ':';
+  for (let i = 0; i < 64; i++) { const p = b[i]; k += p ? p.c + p.t : '.'; }
+  return k;
+}
 /* game state after the side `turn` is to move: legal moves, check, and result (winner 'w'|'b'|null) */
 export function gameStatus(b, turn) {
   const moves = legal(b, turn);

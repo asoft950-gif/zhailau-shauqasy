@@ -174,7 +174,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
 
 <script type="module">
 import {makeSkins} from './skins.js';
-import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard} from './engine.js';
+import {N_D,K_D,B_D,R_D,VAL,inb,opp,pseudo,applyMove,attacked,kingSq,inChk,legal,evalB,orderMoves,qs,nega,bestMove,ORDER as ENG_ORDER,gameStatus,pickMove,startBoard,posKey} from './engine.js';
 
 (()=>{
 'use strict';
@@ -1081,12 +1081,19 @@ function renderLost(){
     }
   }
 }
+let repDraw=false;
 function afterMove(silent){
   allMoves=legal(board,turn);
   checked=inChk(board,turn);
   const onlyK=board.slice(0,64).every(p=>!p||p.t==='K');
   if(!allMoves.length){over=true;winner=checked?opp(turn):null}
   else if(onlyK){over=true;winner=null}
+  repDraw=false;
+  if(!over&&!net&&!rp&&mode!=='puz'){
+    const cur=posKey(board,turn);
+    let n=1;for(const s of hist)if(posKey(s.b,s.turn,s.cs[0])===cur)n++;
+    if(n>=3){over=true;winner=null;repDraw=true}
+  }
   if(over){
     setStatus(winner?NAME[winner]+' жағы жеңді':'Тең ойын',winner||turn);
     showResult();if(winner)document.body.classList.add('finale');
@@ -1101,14 +1108,14 @@ function afterMove(silent){
 }
 function showResult(){
   if(rp||mode==='puz'){$('#result').hidden=true;return}
-  const R={time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
+  const R={repetition:'Бір позиция 3 рет қайталанды — тең ойын.',time:'Уақыт бітті.',mate:'Мат: Батыр құлады.',resign:'Қарсылас берілді.',timeout:'Қарсылас ойыннан кетті.',abandoned:'Ойын тасталды.',stalemate:'Жүріс қалмады, бірақ Батыр қауіпсіз.',bare:'Екі Батыр ғана қалды.'};
   let t=winner?NAME[winner]+' жағы жеңді!':'Тең ойын';
   if(net&&net.you&&net.mode==='pvp'||net&&net.mode==='ai')t=winner===net.you?'Жеңдің! 🏆':winner?'Жеңілдің':'Тең ойын';
   const cw=campStage&&winner==='w'&&net&&net.you==='w';
   if(cw)t='Жорық: '+campStage+'-деңгей өтті! 🏆';
   $('#resBtn').textContent=cw?'Жорық картасы':campStage?'Қайта ойнау':'Қайта ойнау';
   $('#resT').textContent=t;
-  const rs=net&&net.reason?net.reason:(winner?'mate':(checked?'':'stalemate'));
+  const rs=net&&net.reason?net.reason:repDraw?'repetition':(winner?'mate':(checked?'':'stalemate'));
   $('#resS').textContent=R[rs]||'';
   $('#result').hidden=false;
   $('#resFriend').hidden=!(net&&net.mode==='pvp'&&net.you&&PL().isIn());
@@ -1669,7 +1676,7 @@ async function loadLive(card){
   }
   if(rc.recent&&rc.recent.length){
     card.append(el('h4','','🎞 Соңғы ойындар'));
-    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең'};
+    const RN={mate:'мат',resign:'берілді',time:'уақыт',timeout:'кетіп қалды',stalemate:'пат',bare:'тең',repetition:'қайталану'};
     for(const g of rc.recent){
       const w=g.winner==='w'?'🏆 ':'',bl=g.winner==='b'?'🏆 ':'';
       const b=el('button','btn ghost live',w+g.wn+' ⚔ '+bl+g.bn+' · '+g.plies+' жүріс · '+(RN[g.reason]||g.reason));

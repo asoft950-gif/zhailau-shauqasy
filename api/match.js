@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { sql, send, sessionUid, needJson, limited, applyResult, AI_RATING, CAMP, campaignWin } from './_lib.js';
-import { startBoard, applyMove, gameStatus, pickMove } from '../engine.js';
+import { startBoard, applyMove, gameStatus, pickMove, posKey } from '../engine.js';
 
 const PC = 'QRBN';
 const enc = (m) => m.f | (m.t << 6) | (m.promo ? (PC.indexOf(m.promo) + 1 || 1) << 12 : 0);
@@ -37,6 +37,18 @@ function replay(moves) {
     b = applyMove(b, m);
   }
   return { b, log };
+}
+/* threefold repetition: did the position after the last move occur 3 times? */
+function repeated3(moves) {
+  let b = startBoard();
+  const seen = new Map([[posKey(b, 'w'), 1]]);
+  let last = '';
+  for (let i = 0; i < moves.length; i++) {
+    b = applyMove(b, dec(moves[i]));
+    last = posKey(b, i % 2 ? 'w' : 'b');
+    seen.set(last, (seen.get(last) || 0) + 1);
+  }
+  return (seen.get(last) || 0) >= 3;
 }
 function sideStats(log, side) {
   const own = log.filter(x => x.side === side);
@@ -312,6 +324,7 @@ export default async function handler(req, res) {
           after = gameStatus(nb, 'w');
         }
       }
+      if (!after.over && repeated3(moves)) after = { over: true, winner: null, reason: 'repetition' };
       let clk = null;
       if (m.tc) {
         const c = clockNow(m), left = (seat === 'w' ? c.cw : c.cb) + (INC[m.tc] || 0) * 1000;

@@ -31,7 +31,7 @@ function toast(icn,title,sub,action,ms){
 /* ---------- overlay helper ---------- */
 let lastFocus=null;
 function openOv(){const o=$('#ov');lastFocus=document.activeElement;o.hidden=false;document.body.style.overflow='hidden';const f=o.querySelector('input,button.x');f&&f.focus()}
-function closeOv(){$('#ov').hidden=true;document.body.style.overflow='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
+function closeOv(){if(/^#cab-/.test(location.hash))history.replaceState(null,'',location.pathname+location.search);$('#ov').hidden=true;document.body.style.overflow='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#ov').hidden)closeOv()});
 
 /* ---------- account button ---------- */
@@ -136,7 +136,9 @@ async function profileView(t){
   await refresh();
   if(!me){authView('login');return}
   const d=$('#dlg');d.textContent='';d.className='dlg big';
+  try{history.replaceState(null,'',location.pathname+location.search+'#cab-'+tab)}catch(e){}
   const h=el('div','dh');h.append(el('h2','','Профиль'));
+  const home=el('button','btn ghost sm','🏠 Басты бет');home.onclick=closeOv;h.append(home);
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
   const tl=[['profile','Профиль'],['fr','Достар'],['clan','Клан'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг'],['set','Баптау']];if(me.role==='creator'||me.role==='moderator')tl.push(['adm','Админ']);
@@ -702,6 +704,7 @@ function init(){
   $('#acct').onclick=()=>me?profileView('profile'):authView('login');
   $('#ov').addEventListener('pointerdown',e=>{if(e.target.id==='ov')closeOv()});
   const ready=refresh();
+  ready.then(r=>{const mt=/^#cab-(\w+)$/.exec(location.hash);if(mt&&r&&r.user)profileView(['profile','fr','clan','daily','shop','cup','ach','top','set','adm'].includes(mt[1])?mt[1]:'profile')});
   window.Plat={pskin:()=>(me&&me.skins&&me.skins.piece)||'beast',skin:()=>(me&&me.skins&&me.skins.board)||'grass',api,toast,showAward,refresh,ready,isIn:()=>!!me,login:()=>authView('login'),register:()=>authView('reg'),onAuth:(fn,once)=>authCbs.push({fn,once:!!once})};
 }
 init();
