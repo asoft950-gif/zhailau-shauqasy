@@ -145,6 +145,15 @@ export default async function handler(req, res) {
         [newCode(), asBlack ? null : uid, asBlack ? uid : null, pub]);
       return send(res, 200, { match: await view(r[0], uid) });
     }
+    if (b.action === 'invite') {
+      if (await limited(req, 'invite', 30, 600)) return send(res, 429, { error: 'Тым жиі' });
+      const to = Number(b.to);
+      const fr = await sql.query("SELECT 1 FROM friendships WHERE status='accepted' AND ((a=$1 AND b=$2) OR (a=$2 AND b=$1))", [uid, to]);
+      if (!fr.length) return send(res, 403, { error: 'Алдымен дос болу керек' });
+      await cancelOwnOpen(uid);
+      const r = await sql.query("INSERT INTO matches (code,mode,white_id,is_public,status,invite_id) VALUES ($1,'pvp',$2,false,'open',$3) RETURNING *", [newCode(), uid, to]);
+      return send(res, 200, { match: await view(r[0], uid) });
+    }
     if (b.action === 'join') {
       if (await limited(req, 'join', 40, 600)) return send(res, 429, { error: 'Тым жиі' });
       const code = String(b.code || '').trim().toUpperCase();

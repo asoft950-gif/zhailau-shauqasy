@@ -121,7 +121,7 @@ canvas#cv{display:block;width:100%;height:auto;border-radius:14px;touch-action:m
     <div class="lobby" id="lobby" hidden></div>
     <div class="result" id="result" hidden>
       <div><strong id="resT"></strong><span id="resS"></span></div>
-      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button></div>
+      <div class="rbtns"><button class="btn" id="resBtn">Қайта ойнау</button><button class="btn ghost" id="resRep" type="button">▶ Қайта көру</button><button class="btn ghost" id="resShare" type="button">📤 Бөлісу</button><button class="btn ghost" id="resFriend" type="button" hidden>➕ Дос болу</button></div>
     </div>
     <div class="rpanel" id="rpanel" hidden>
       <div class="rpbtns"><button type="button" id="rpFirst" aria-label="Басына">⏮</button><button type="button" id="rpPrev" aria-label="Артқа">◀</button><button type="button" id="rpPlay" class="main" aria-label="Ойнату">▶</button><button type="button" id="rpNext" aria-label="Алға">▶︎|</button><button type="button" id="rpLast" aria-label="Соңына">⏭</button></div>
@@ -1061,6 +1061,7 @@ function showResult(){
   const rs=net&&net.reason?net.reason:(winner?'mate':(checked?'':'stalemate'));
   $('#resS').textContent=R[rs]||'';
   $('#result').hidden=false;
+  $('#resFriend').hidden=!(net&&net.mode==='pvp'&&net.you&&PL().isIn());
   snd('end',winner&&(!net||winner===net.you));
 }
 function setHint(p){
@@ -1599,6 +1600,16 @@ async function shareGame(){
   if(blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='zhailau.png';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 }
 $('#resShare').addEventListener('click',shareGame);
+$('#resFriend').addEventListener('click',async e=>{
+  if(!net||!net.you)return;
+  const o=net.you==='w'?net.black:net.white;if(!o||!o.name)return;
+  const r=await PL().api('friends',{method:'POST',body:{action:'add',name:o.name}});
+  if(r.ok){PL().toast(r.state==='friends'?'🤝':'📨',r.state==='friends'?o.name+' — енді досың':'Сұраныс жіберілді',o.name);e.currentTarget.hidden=true}
+  else PL().toast('⚠️',r.error||'Қате');
+});
+window.__joinCode=c=>{if(net&&net.you&&net.mode==='pvp'&&net.status==='active'){PL().toast('♟️','Алдымен ойыныңды аяқта');return}joinCode(c)};
+window.__openPvp=m=>{if(net&&net.you&&net.mode==='pvp'&&net.status==='active'){PL().toast('♟️','Алдымен ойыныңды аяқта');return}openPvp(m,true)};
+window.__watch=id=>watchMatch(id);
 $('#rpShare').addEventListener('click',shareGame);
 
 function setMode(m,quiet){

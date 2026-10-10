@@ -4,7 +4,7 @@ const $=s=>document.querySelector(s);
 const el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt!==undefined)e.textContent=txt;return e};
 const AV=['P','N','B','R','Q','K'];
 const AVN={P:'Қоян',N:'Жылқы',B:'Жылан',R:'Түйе',Q:'Бүркіт',K:'Батыр'};
-let me=null,data=null,tab='profile',cupP='week';
+let me=null,data=null,tab='profile',cupP='week',fr=null,beat=0;const seenInv=new Set();
 
 async function api(path,opt){
   try{
@@ -42,7 +42,26 @@ function renderBtn(){
   b.append(avatarCanvas(me.avatar));
   const w=el('span','nm',me.username);w.append(el('span','lv',(me.role==='creator'?'👑 Создатель · ':'')+'Деңгей '+me.level+' · '+me.rating));
   b.append(w);
+  if(fr&&fr.incoming&&fr.incoming.length)b.append(el('i','dotb'));
+  syncBeat();
 }
+async function beatNow(){
+  if(!me||document.hidden)return;
+  const r=await api('friends');
+  if(!r.ok)return;
+  const had=fr&&fr.incoming?fr.incoming.length:0;
+  fr=r;
+  if(r.incoming.length!==had)renderBtn();
+  for(const iv of r.invites){
+    if(seenInv.has(iv.id))continue;seenInv.add(iv.id);
+    toast('⚔️',iv.from+' сені ойынға шақырды','Қосылу үшін басыңыз',{label:'Қосылу',fn:()=>window.__joinCode&&window.__joinCode(iv.code)},20000);
+  }
+}
+function syncBeat(){
+  if(me&&!beat){beatNow();beat=setInterval(beatNow,25000)}
+  else if(!me&&beat){clearInterval(beat);beat=0;fr=null}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)beatNow()});
 async function refresh(){
   const r=await api('me');
   me=r.user||null;data=r.user?r:null;
@@ -103,7 +122,7 @@ async function profileView(t){
   const h=el('div','dh');h.append(el('h2','','Профиль'));
   const x=el('button','x','×');x.setAttribute('aria-label','Жабу');x.onclick=closeOv;h.append(x);d.append(h);
   const tb=el('div','tabs');tb.setAttribute('role','tablist');
-  const tl=[['profile','Профиль'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
+  const tl=[['profile','Профиль'],['fr','Достар'],['daily','Тапсырма'],['shop','Дүкен'],['cup','Турнир'],['ach','Жетістіктер'],['top','Рейтинг']];if(me.role==='creator')tl.push(['adm','Админ']);
   for(const [k,l] of tl){
     const b=el('button','',l);b.setAttribute('role','tab');b.setAttribute('aria-selected',k===tab);b.onclick=()=>profileView(k);tb.append(b);
   }
@@ -113,6 +132,7 @@ async function profileView(t){
   if(tab==='profile')renderProfile(body);
   else if(tab==='ach')renderAch(body);
   else if(tab==='daily')renderDaily(body);
+  else if(tab==='fr')await renderFriends(body);
   else if(tab==='shop')renderShop(body);
   else if(tab==='cup')await renderCup(body,cupP);
   else if(tab==='top')await renderTop(body);
@@ -159,6 +179,52 @@ function renderProfile(b){
   const lo=el('button','btn ghost wide','Шығу');lo.style.marginTop='16px';
   lo.onclick=async()=>{await api('logout',{method:'POST',body:{}});me=null;data=null;renderBtn();closeOv();fireAuth('out');toast('👋','Сау бол!')};
   b.append(lo);
+}
+async function renderFriends(b){
+  const row=el('div','frow');
+  const inp=el('input');inp.placeholder='Ойыншы есімі';inp.maxLength=20;inp.setAttribute('aria-label','Ойыншы есімі');
+  const ad=el('button','btn','Дос қосу');
+  const go=async()=>{
+    const name=inp.value.trim();if(!name)return;
+    ad.disabled=true;
+    const r=await api('friends',{method:'POST',body:{action:'add',name}});
+    ad.disabled=false;
+    if(!r.ok){toast('⚠️',r.error||'Қате');return}
+    toast(r.state==='friends'?'🤝':'📨',r.state==='friends'?r.name+' — енді досың':'Сұраныс жіберілді',r.name);
+    await profileView('fr');
+  };
+  ad.onclick=go;inp.onkeydown=e=>{if(e.key==='Enter')go()};
+  row.append(inp,ad);b.append(row);
+  const r=await api('friends');
+  if(!r.ok){b.append(el('p','err',r.error||'Қате'));return}
+  fr=r;renderBtn();
+  const act=async(a,id,msg)=>{const x=await api('friends',{method:'POST',body:{action:a,id}});if(x.ok){if(msg)toast('✅',msg);await profileView('fr')}else toast('⚠️',x.error||'Қате')};
+  const mk=(u,sub)=>{const li=el('div','fitem');li.append(avatarCanvas(u.avatar,'fav'));const w=el('div','fn');w.append(el('b','',u.name+(u.role==='creator'?' 👑':'')),el('span','',sub));li.append(w);return li};
+  if(r.incoming.length){
+    b.append(el('h2','','Сұраныстар'));
+    for(const u of r.incoming){
+      const li=mk(u,'дос болғысы келеді');
+      const y=el('button','btn sm','✓');y.setAttribute('aria-label','Қабылдау');y.onclick=()=>act('accept',u.id,u.name+' — енді досың');
+      const n=el('button','btn ghost sm','✕');n.setAttribute('aria-label','Бас тарту');n.onclick=()=>act('decline',u.id);
+      li.append(y,n);b.append(li);
+    }
+  }
+  b.append(el('h2','','Достар ('+r.friends.length+')'));
+  if(!r.friends.length)b.append(el('p','xpt','Әзірше дос жоқ. Жоғарыға есімін жазып қос, немесе онлайн ойыннан кейін «Дос болу» батырмасын бас.'));
+  for(const u of r.friends){
+    const li=mk(u,(u.playing?'🎮 ойнап жатыр':u.online?'🟢 онлайн':'⚪ офлайн')+' · '+u.rating);
+    if(u.online&&!u.playing){const iv=el('button','btn sm','⚔');iv.title='Ойынға шақыру';iv.setAttribute('aria-label','Ойынға шақыру');
+      iv.onclick=async()=>{iv.disabled=true;const x=await api('match',{method:'POST',body:{action:'invite',to:u.id}});if(x.match&&window.__openPvp){closeOv();window.__openPvp(x.match);toast('📨','Шақыру жіберілді',u.name)}else{toast('⚠️',x.error||'Қате');iv.disabled=false}};
+      li.append(iv)}
+    if(u.playing){const w=el('button','btn ghost sm','👁');w.title='Ойынын көру';w.setAttribute('aria-label','Көру');w.onclick=()=>{closeOv();window.__watch&&window.__watch(u.playing)};li.append(w)}
+    let armed=0;const rm=el('button','btn ghost sm','✕');rm.setAttribute('aria-label','Достан шығару');
+    rm.onclick=()=>{if(!armed){armed=1;rm.textContent='?';setTimeout(()=>{armed=0;rm.textContent='✕'},2500);return}act('remove',u.id,u.name+' достардан шығарылды')};
+    li.append(rm);b.append(li);
+  }
+  if(r.outgoing.length){
+    b.append(el('h2','','Жіберілген сұраныстар'));
+    for(const u of r.outgoing){const li=mk(u,'жауап күтілуде');const c=el('button','btn ghost sm','✕');c.setAttribute('aria-label','Болдырмау');c.onclick=()=>act('cancel',u.id);li.append(c);b.append(li)}
+  }
 }
 function left(iso){const ms=new Date(iso)-Date.now();const h=Math.max(0,Math.floor(ms/3600e3)),m=Math.max(0,Math.floor(ms%3600e3/60e3));return h+' сағ '+m+' мин'}
 async function patchMe(body){const r=await api('me',{method:'PATCH',body});return r}
