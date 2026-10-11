@@ -414,9 +414,12 @@ const RK_META={Kr:[156,121,58.8,121.8],Ku:[154,121,58.4,121.8],Kd:[125,121,60.5,
 const RK_U=160/(534*0.42); /* local units per atlas pixel (frame = 1.6 tiles) */
 const EL_META={"Kr": [165, 149, 81.2, 149.1], "Ku": [146, 144, 72.8, 144.2], "Kd": [141, 139, 70.0, 138.6], "Qr": [179, 142, 88.9, 142.1], "Qu": [193, 154, 95.9, 154.0], "Qd": [152, 142, 76.3, 142.1], "Br": [178, 145, 88.9, 144.9], "Bu": [196, 164, 98.0, 164.5], "Bd": [146, 152, 72.1, 151.9], "Nr": [171, 158, 84.0, 157.5], "Nu": [161, 153, 79.8, 152.6], "Nd": [162, 147, 81.2, 147.0], "Rr": [159, 135, 78.4, 135.1], "Ru": [158, 130, 77.7, 130.9], "Rd": [146, 133, 72.8, 133.0], "Pr": [143, 129, 70.7, 128.8], "Pu": [132, 132, 65.1, 131.6], "Pd": [149, 132, 74.9, 131.6]};
 /* sprite packs: sheet layout differs (knights: 4x5, idle/fallen in row 4; elves: 4x8, 16 cells per team) */
+const PX_META=(()=>{const m={};for(const t of'KQBNRP')for(const d of'rud')m[t+d]=[128,128,64,108.8];return m})();
 const RK_PACK={
   knights:{dir:'skins/knights/',meta:RK_META,cell:(i,tm)=>i===9?[tm?3:2,4]:i===8?[tm?1:0,4]:[i%4,(tm?2:0)+(i>=4?1:0)],fall:9,dying:null},
-  elves:{dir:'skins/elves/',meta:EL_META,cell:(i,tm)=>[i%4,(i>>2)+(tm?4:0)],fall:12,dying:10}
+  elves:{dir:'skins/elves/',meta:EL_META,cell:(i,tm)=>[i%4,(i>>2)+(tm?4:0)],fall:12,dying:10},
+  /* Pixel Kingdoms: 128px cells, 4x8 sheet; physical order idle,walk0-3,attack0-3,hit,death0-2,defeat0-1,victory */
+  pixel:{dir:'skins/pixel/',meta:PX_META,U:100/88,snap:true,cell:(i,tm)=>{const p=i<4?i+1:i<8?i+1:i===8?0:i;return[p%4,(p>>2)+(tm?4:0)]},fall:12,dying:10}
 };
 const RK_IMG={};
 const RK_DIR={r:'right',u:'up',d:'down'};
@@ -437,12 +440,15 @@ function rkCell(c,t,dr,P,idx,al,bob){
   const m=PK.meta[t+dr],mw=m[0],mh=m[1];
   const [col,row]=PK.cell(idx,P.team==='b'?1:0);
   const g=c.globalAlpha;c.globalAlpha=g*Math.min(1,al);
-  c.drawImage(e.img,col*mw,row*mh,mw,mh,-m[2]*RK_U,-m[3]*RK_U+2+bob,mw*RK_U,mh*RK_U);
+  const U=PK.U||RK_U;
+  if(PK.snap){const tf=c.getTransform();c.imageSmoothingEnabled=Math.hypot(tf.a,tf.b)*U<1}
+  c.drawImage(e.img,col*mw,row*mh,mw,mh,-m[2]*U,-m[3]*U+2+bob,mw*U,mh*U);
   c.globalAlpha=g;return true;
 }
 /* continuous cross-fade between consecutive cells a..b (pos is fractional index) */
 function rkBlend(c,t,dr,P,base,n,pos,al,bob,loop){
   const i=Math.floor(pos),f=rkSm(pos-i),j=loop?(i+1)%n:Math.min(n-1,i+1);
+  if(RK_PACK[P.pack||'knights'].snap){rkCell(c,t,dr,P,base+(f>.5?j:i%n),al,bob);return}
   rkCell(c,t,dr,P,base+i%n,al,bob);
   if(f>.01&&j!==i%n)rkCell(c,t,dr,P,base+j,al*f,bob);
 }
@@ -490,6 +496,13 @@ const ELP={
   w:{main:'#E8D9A8',light:'#FFF6D6',dark:'#9C8A52',line:'#3A2E12',accent:'#E0A93A',team:'w',pack:'elves'},
   b:{main:'#6A7FB8',light:'#B7C6EE',dark:'#2E3B66',line:'#10152B',accent:'#8FA8FF',team:'b',pack:'elves'}
 };
+const PXP={
+  w:{main:'#4A78D8',light:'#E8F0FF',dark:'#2A4A9A',line:'#10204A',accent:'#F2C23A',team:'w',pack:'pixel'},
+  b:{main:'#7A4AB0',light:'#C8B0E8',dark:'#3A2260',line:'#140A28',accent:'#C8CCD8',team:'b',pack:'pixel'}
+};
+const PIXEL={dirs:true,norot:true,pending:t=>!rkImg(t,'d','pixel').ok,name:'Пиксель патшалықтары',desc:'16-bit пиксель арт',pal:PXP,sc:{P:1,N:1,B:1,R:1,Q:1,K:1},
+  names:{P:'Сарбаз',N:'Атты рыцарь',B:'Дана',R:'Тас голем',Q:'Сиқыршы ханша',K:'Қолбасшы патша'},
+  draw:{P:rkDraw('P'),N:rkDraw('N'),B:rkDraw('B'),R:rkDraw('R'),Q:rkDraw('Q'),K:rkDraw('K')}};
 const ELVES={dirs:true,norot:true,pending:t=>!rkImg(t,'d','elves').ok,name:'Күн мен Ай орманы',desc:'Күн және Ай эльфтері',pal:ELP,sc:{P:1,N:1,B:1,R:1,Q:1,K:1},
   names:{P:'Орман сақшысы',N:'Бұғы салтты',B:'Жұлдыз сиқыршысы',R:'Ағаш мұнара',Q:'Орман ханшасы',K:'Күн мен Ай патшасы'},
   draw:{P:rkDraw('P'),N:rkDraw('N'),B:rkDraw('B'),R:rkDraw('R'),Q:rkDraw('Q'),K:rkDraw('K')}};
@@ -497,7 +510,7 @@ const KNIGHTS={dirs:true,norot:true,pending:t=>!rkImg(t,'d').ok,name:'Корол
   names:{P:'Жаяу рыцарь',N:'Салт атты',B:'Сиқыршы',R:'Мұнара сақшысы',Q:'Патшайым',K:'Патша'},
   draw:{P:rkDraw('P'),N:rkDraw('N'),B:rkDraw('B'),R:rkDraw('R'),Q:rkDraw('Q'),K:rkDraw('K')}};
 
-const T={classic,heroes:HEROES,alien:ALIEN,space:SPACE,dark:DARK,light:LIGHT,knights:KNIGHTS,elves:ELVES};
+const T={classic,heroes:HEROES,alien:ALIEN,space:SPACE,dark:DARK,light:LIGHT,knights:KNIGHTS,elves:ELVES,pixel:PIXEL};
 T.__kit={poly,crv,eyes,glow,wrap,human,horse,SKINTONE,STEEL_,sword};
 return T;
 }
